@@ -237,6 +237,7 @@
 /---------------------------------------------------------------------------*/
 
 #define FF_FS_TINY		1
+#define FF_NO_FAT12		1	/* CHSaveMan: FAT12 volumes (under ~16 MB) are not mounted (CARD NOT FAT32); -0.2 KB */
 /* This option switches tiny buffer configuration. (0:Normal or 1:Tiny)
 /  At the tiny configuration, size of file object (FIL) is reduced FF_MAX_SS bytes.
 /  Instead of private sector buffer eliminated from the file object, common sector

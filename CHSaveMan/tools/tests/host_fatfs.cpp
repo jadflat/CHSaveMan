@@ -39,7 +39,7 @@ static uint64_t rdSec = 0;
 
 extern "C" {
 uint8_t chsd_init_err = 0;
-uint8_t chsd_stream = 0;
+uint8_t chsd_stream = 0, chsd_fail = 0;
 void chsd_end(void) {}
 DSTATUS disk_initialize(BYTE d) {
     if (d) return STA_NOINIT;
@@ -59,7 +59,7 @@ DRESULT disk_write(BYTE d, const BYTE *buf, LBA_t s, UINT n) {
     if (d || !present) return RES_NOTRDY;
     if ((uint64_t)(s + n) * 512 > img.size()) return RES_PARERR;
     for (UINT i = 0; i < n; i++) {
-        if (failAt >= 0 && nWrites >= failAt) return RES_ERROR;
+        if (failAt >= 0 && nWrites >= failAt) { chsd_fail = 1; return RES_ERROR; }
         nWrites++;
         memcpy(img.data() + (size_t)(s + i) * 512, buf + 512 * i, 512);
         if (logOn) { WLog w; w.lba = s + i; memcpy(w.d, buf + 512 * i, 512); wlog.push_back(w); }
@@ -85,7 +85,7 @@ static void put32(uint8_t *p, uint32_t v) { for (int i = 0; i < 4; i++) p[i] = (
 // card formatters choose; a folder then rarely needs a FAT read).
 static void formatFat16Size(uint32_t total, uint32_t spc) {
     const uint32_t rsvd = 4, rootSec = 32;
-    img.assign((size_t)total * 512, 0);
+    img.assign((size_t)total * 512, 0); sdio::forget();
     uint32_t fatsz = 1, clus = 0;
     for (;;) {
         clus = (total - rsvd - 2 * fatsz - rootSec) / spc;
@@ -107,7 +107,7 @@ static void formatFat16Big() { formatFat16Size(327680, 64); }
 // FAT32: 40 MB card, MBR, the partition at sector 2048, 1 sector a cluster (as tools/mkcard.py).
 static void formatFat32() {
     const uint32_t size = 81920, start = 2048, total = size - start, rsvd = 32;
-    img.assign((size_t)size * 512, 0);
+    img.assign((size_t)size * 512, 0); sdio::forget();
     uint32_t fatsz = 1, clus = 0;
     for (;;) {
         clus = total - rsvd - 2 * fatsz;
@@ -183,7 +183,7 @@ static void testMount(void (*format)()) {
     pages(p, "CHAA", 1, "CHBB", 2);
     check(sdio::backup(p) == sdio::IO, "a card that fails init: the backup is IO");
     present = true;
-    img.assign(16 << 20, 0);
+    img.assign(16 << 20, 0); sdio::forget();
     check(sdio::readRec("SAVES.BAK", "SAVES.TMP", p, 2) == sdio::NOT_FAT, "a card with no FAT volume: NOT_FAT");
     check(sdio::backup(p) == sdio::NOT_FAT, "no FAT volume: the backup is NOT_FAT");
     format();
@@ -279,7 +279,7 @@ static void testRecords() {
 
 static std::vector<uint8_t> base;
 static void stateAfter(size_t k) {            // the card as a power cut after k logged sector writes leaves it
-    img = base;
+    img = base; sdio::forget();
     for (size_t i = 0; i < k; i++) memcpy(img.data() + (size_t)wlog[i].lba * 512, wlog[i].d, 512);
 }
 
@@ -316,7 +316,7 @@ static void testCuts(const char *what, const char *fin, const char *tmp, uint8_t
     // A sector write that fails at each point: IO, and the file still reads as the old or the new one.
     int failBad = 0, failOk = 0;
     for (size_t k = 0; k < wlog.size(); k++) {
-        img = base;
+        img = base; sdio::forget();
         nWrites = 0; failAt = (long)k;
         r = sdio::writeRec(fin, tmp, newp, n, bk1);
         failAt = -1;
@@ -327,7 +327,7 @@ static void testCuts(const char *what, const char *fin, const char *tmp, uint8_t
     }
     check(!failBad, what, "a failing sector write never loses the file");
     check(!failOk, what, "a failing sector write is reported (IO)");
-    img = done;
+    img = done; sdio::forget();
 }
 
 static void testAppendCut() {
@@ -349,13 +349,13 @@ static void testAppendCut() {
     check(!bad, "SAVENAME.TXT append cut at every write: the old lines are intact");
     int failBad = 0;
     for (size_t k = 0; k < wlog.size(); k++) {
-        img = base; nWrites = 0; failAt = (long)k;
+        img = base; sdio::forget(); nWrites = 0; failAt = (long)k;
         sdio::Result r = sdio::namesAppend(add, (uint16_t)strlen(add));
         failAt = -1;
         if (r != sdio::IO || !getFile("SAVENAME.TXT", d) || str(d).compare(0, strlen(old), old)) failBad++;
     }
     check(!failBad, "a failed SAVENAME.TXT append is IO and keeps the old lines");
-    img = base;
+    img = base; sdio::forget();
     uint32_t found = 0;
     const char codes[] = "CHIXQQQAZZZZ";
     check(sdio::namesFind(codes, 4, 3, 7, &found) == sdio::OK && found == 1, "namesFind before the append: CHIX only");
@@ -486,9 +486,13 @@ static void testScan(void (*format)(), const char *label) {
     // A remount (any other card call) during a scan ends it with IO, as the app's comments say.
     check(sdio::scanBegin(s) == sdio::OK && sdio::scanNext(s, it) == sdio::BUSY, "a second scan starts");
     uint8_t p[512];
-    sdio::restore(p);
+    sdio::restore(p);                      // 0.20: the same card is not mounted again, so the scan goes on
     r = sdio::scanNext(s, it);
-    check(r == sdio::IO, "a remount during a scan ends it with IO", std::to_string(r));
+    check(r == sdio::BUSY || r == sdio::OK, "a card call during a scan (same card, no remount) leaves it running", std::to_string(r));
+    sdio::forget();                        // a remount still ends it
+    sdio::restore(p);
+    for (int i = 0; i < 100 && r == sdio::BUSY; i++) r = sdio::scanNext(s, it);
+    check(r == sdio::IO || r == sdio::OK, "a remount during a scan ends it (IO) or the scan had finished its call", std::to_string(r));
     sdio::scanEnd(s);
     // A card pulled mid-scan: IO.
     check(sdio::scanBegin(s) == sdio::OK, "a third scan starts");

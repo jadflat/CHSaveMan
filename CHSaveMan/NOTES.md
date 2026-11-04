@@ -47,6 +47,13 @@
   NOTES.md). Not yet run there: NO CARD with the slot physically empty, a non-FAT card, the library's BROKEN state.
 - Budget at 0.7: image 33.1 KB of 50.4 KB, static RAM 15.6 KB of 18.4 KB (0.6: 32.7 KB, 15.6 KB) (0.4: 28.9 KB, 14.7 KB).
 
+## 0.20 (see CHANGELOG.md)
+
+- START in GAMES LIST: HIDE ALL / SHOW ALL on IGNORE.TXT, in passes over GAMELIST.TXT, one card job a frame; the CSV
+  is only written in SAVES ONLY. Test: `python CHSaveMan/tools/tests/sim_v020.py`.
+- Mount cache: a full mount (about 11 ms) only when the card may have changed; else one boot-sector read and a BPB
+  check. A failed sector read or write, or a different BPB, mounts afresh. FAT12 is not mounted.
+
 ## v0.12 to v0.14 (simulator only; see CHANGELOG.md)
 
 - New card files: SAVES.BK1, SAVES.UND, SAVES/<CODE>.SAV/.SV1, IGNORE.TXT, GAMELIST.CSV; GAMELIST.TXT is now

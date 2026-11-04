@@ -212,10 +212,13 @@ Result writeText(const char *fin, const char *tmp, const char *buf, uint16_t len
     Result m = mount();
     if (m != OK) return m;
     std::error_code ec;
+    if (!len) { std::filesystem::remove(host(tmp), ec); std::filesystem::remove(host(fin), ec); return OK; }
     std::filesystem::create_directories(card(), ec);
     return writeVia(host(tmp), host(fin), (const uint8_t *)buf, len, nullptr, 0);
 }
 
+Result appendText(const char *fin, const char *tmp, const char *buf, uint16_t len);
+Result appendKeep(const char *fin, const char *tmp, const char *buf, uint16_t len) { return appendText(fin, tmp, buf, len); }
 Result appendText(const char *fin, const char *tmp, const char *buf, uint16_t len) {
     Result m = mount();
     if (m != OK) return m;
@@ -299,7 +302,8 @@ Result fileFeed(const char *path, void (*feed)(char c)) {
 }
 
 void (*scanSkip)(const char *path, const char *why) = nullptr;     // debug builds only use it
-bool (*scanRoom)(uint16_t us) = nullptr;                          // the app sets it on the board only
+bool (*scanRoom)(uint16_t us) = nullptr;
+void forget() {}                          // the app sets it on the board only
 
 Result scanBegin(Scan &s) {
     s.fileIndex = 0;

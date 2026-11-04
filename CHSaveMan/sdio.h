@@ -36,6 +36,8 @@ enum Result : uint8_t {
 };
 
 uint32_t crc32(const uint8_t *p, uint32_t n);
+/// The next card call mounts afresh (a test that swaps the disk under the app; the board after a restart).
+void forget();
 
 // Record files: the header above with n pages (SAVES.BAK and SAVES.UND: 2; SAVES/<CODE>.SAV: 1, one game's record).
 /// Write `fin` from n pages: via `tmp`, read back, then (bk1 not null) the old `fin` becomes bk1, then the rename.
@@ -55,9 +57,11 @@ Result srcScan(uint8_t *pages, void (*cb)(const char *name, uint8_t n, Result r,
 // Text files in the card's root (SAVENAME.TXT, IGNORE.TXT).
 /// Append lines to fin (made if absent); a line break goes first. A tmp left by an old write becomes fin first.
 Result appendText(const char *fin, const char *tmp, const char *buf, uint16_t len);
+/// appendText without the close: the file stays open (as listBegin's) until listEnd(), in a later frame.
+Result appendKeep(const char *fin, const char *tmp, const char *buf, uint16_t len);
 /// Read fin (or tmp) into buf: at most cap bytes, whole lines (*more: the file is longer). NO_FILE if absent.
 Result readText(const char *fin, const char *tmp, char *buf, uint16_t cap, uint16_t *len, bool *more);
-/// Replace fin with buf (via tmp, read back, rename).
+/// Replace fin with buf (via tmp, read back, rename). len 0: fin (and tmp) are removed.
 Result writeText(const char *fin, const char *tmp, const char *buf, uint16_t len);
 inline Result namesAppend(const char *buf, uint16_t len) { return appendText("SAVENAME.TXT", "SAVENAME.TMP", buf, len); }
 /// Search the whole of SAVENAME.TXT (or SAVENAME.TMP) for "CODE=name" lines. The codes

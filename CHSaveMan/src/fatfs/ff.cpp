@@ -1194,6 +1194,7 @@ static DWORD get_fat (		/* 0xFFFFFFFF:Disk error, 1:Internal error, 2..0x7FFFFFF
 		val = 0xFFFFFFFF;	/* Default value falls on disk error */
 
 		switch (fs->fs_type) {
+#if !FF_NO_FAT12
 		case FS_FAT12 :
 			bc = (UINT)clst; bc += bc / 2;
 			if (move_window(fs, fs->fatbase + (bc / SS(fs))) != FR_OK) break;
@@ -1202,6 +1203,7 @@ static DWORD get_fat (		/* 0xFFFFFFFF:Disk error, 1:Internal error, 2..0x7FFFFFF
 			wc |= fs->win[bc % SS(fs)] << 8;	/* Merge 2nd byte of the entry */
 			val = (clst & 1) ? (wc >> 4) : (wc & 0xFFF);	/* Adjust bit position */
 			break;
+#endif
 
 		case FS_FAT16 :
 			if (move_window(fs, fs->fatbase + (clst / (SS(fs) / 2))) != FR_OK) break;
@@ -1268,6 +1270,7 @@ static FRESULT put_fat (	/* FR_OK(0):succeeded, !=0:error */
 
 	if (clst >= 2 && clst < fs->n_fatent) {	/* Check if in valid range */
 		switch (fs->fs_type) {
+#if !FF_NO_FAT12
 		case FS_FAT12:
 			bc = (UINT)clst; bc += bc / 2;	/* bc: byte offset of the entry */
 			res = move_window(fs, fs->fatbase + (bc / SS(fs)));
@@ -1281,6 +1284,7 @@ static FRESULT put_fat (	/* FR_OK(0):succeeded, !=0:error */
 			*p = (clst & 1) ? (BYTE)(val >> 4) : ((*p & 0xF0) | ((BYTE)(val >> 8) & 0x0F));	/* Update 2nd byte */
 			fs->wflag = 1;
 			break;
+#endif
 
 		case FS_FAT16:
 			res = move_window(fs, fs->fatbase + (clst / (SS(fs) / 2)));
@@ -3620,7 +3624,7 @@ static FRESULT mount_volume (	/* FR_OK(0): successful, !=0: an error occurred */
 		fmt = 0;
 		if (nclst <= MAX_FAT32) fmt = FS_FAT32;
 		if (nclst <= MAX_FAT16) fmt = FS_FAT16;
-		if (nclst <= MAX_FAT12) fmt = FS_FAT12;
+		if (nclst <= MAX_FAT12) fmt = FF_NO_FAT12 ? 0 : FS_FAT12;	/* CHSaveMan: no FAT12 (volumes under ~16 MB) */
 		if (fmt == 0) return FR_NO_FILESYSTEM;
 
 		/* Boundaries and Limits */

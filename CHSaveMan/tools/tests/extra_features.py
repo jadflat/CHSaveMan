@@ -136,7 +136,7 @@ chg(c7 / "GAMES" / "NO SAVE.CHG", "Plain", [])
 chg(c7 / "GAMES" / "BIGGEST.CHG", "Z" * 30, ["QQQ2"])
 start(card=c7, keep_bak=False); clean()
 scan_card(60); s.tap("A")
-menu(5, 4); s.tap("START"); s.frames(5)
+menu(5, 4); s.tap("SELECT"); s.tap("SELECT"); s.frames(3); s.tap("START"); s.frames(5)   # CSV: SAVES ONLY
 t = (c7 / "GAMELIST.CSV").read_bytes().decode() if (c7 / "GAMELIST.CSV").exists() else ""
 print("   CSV:", repr(t))
 check('He said ""hi"", ok' in t or 'He said "hi"' not in t.replace('""', ''), "F7 CSV doubles quotes inside the title field")

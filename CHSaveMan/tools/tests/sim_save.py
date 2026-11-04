@@ -814,6 +814,7 @@ s.tap("A")
 menu(5, 4)
 L = list_state()
 check(L["all"] == "3" and L["ign"] == "1", "still ignored after a rescan: %r" % L)
+s.tap("SELECT"); s.tap("SELECT"); s.frames(3)                     # 0.20: START writes the CSV in SAVES ONLY
 s.tap("START"); s.frames(5)
 csv = cg / "GAMELIST.CSV"
 t = csv.read_bytes().decode() if csv.exists() else ""
@@ -823,13 +824,14 @@ check("SAVED GAMELIST.CSV" in screen() and t.startswith("file,folder,code,title,
       "START in the list exports GAMELIST.CSV: " + repr(t[:300]))
 s.tap("A")
 menu(5, 4)
-for _ in range(3): s.tap("SELECT")
+s.tap("SELECT")                                                     # SAVES ONLY (kept) -> IGNORED ONLY
 s.frames(3)
 check(list_state()["n"] == "1", "IGNORED ONLY shows it")
 s.tap("A"); s.frames(4)
 check(det_state()["ign"] == "1", "its details say ignored")
 s.tap("A"); s.frames(4)                                            # SHOW IT AGAIN
-check("READER" not in ig.read_text() and list_state()["n"] == "0", "SHOW IT AGAIN takes it out of IGNORE.TXT")
+check((not ig.exists() or "READER" not in ig.read_text()) and list_state()["n"] == "0",
+      "SHOW IT AGAIN takes it out of IGNORE.TXT (0.20: removed when nothing is left)")
 (cg / "IGNORE.TXT").write_text("# mine\nnosave.chg\n")           # a hand-written file name, any case
 s.tap("SELECT"); s.frames(3)
 check(list_state()["all"] == "3" and list_state()["ign"] == "1", "a hand-written IGNORE.TXT line (file name only) counts")

@@ -8,6 +8,7 @@
 #include <string.h>
 extern "C" {
 #include "../fatfs/ff.h"
+#include "../fatfs/diskio.h"
 }
 
 namespace sdio {
@@ -25,14 +26,28 @@ static const char TAG[8] = { 'C', 'H', 'S', 'V', 'B', 'K', '0', '1' };
 static const uint16_t HEAD = 16;
 
 extern "C" uint8_t chsd_init_err;
+extern "C" uint8_t chsd_fail;          // disk.cpp: a sector read or write failed since the last mount
 extern "C" uint8_t chsd_stream;         // disk.cpp: keep a CMD18 read open across sequential disk_reads
 extern "C" void chsd_end(void);         // close it (before the panel uses SPI1 again)       // disk.cpp: why disk_initialize failed (1 = no answer to CMD0)
 static FATFS fs;
 
 // A card that answers but has no FAT volume (exFAT: FF_FS_EXFAT is 0) is NOT_FAT, not NO_CARD.
+// 0.20: a full mount (card init, ~11 ms on the board) only when the card may have changed. Otherwise the volume's
+// boot sector is read (one sector) and its BPB compared with the one the last mount saw: a card taken out comes
+// back uninitialised (the read fails), another card has another BPB; either way it is mounted afresh.
+static uint32_t bpb = 0;                // CRC of the mounted volume's BPB; 0: not mounted
+static uint32_t bpbNow() {
+    if (fs.wflag || disk_read(0, fs.win, fs.volbase, 1) != RES_OK) return 0;
+    fs.winsect = fs.volbase;            // FatFs's window now holds that sector
+    return crcRun(0xFFFFFFFFu, fs.win + 11, 79) | 1;
+}
+void forget() { bpb = 0; }
 static Result mount() {
+    if (bpb && !chsd_fail && bpbNow() == bpb) return OK;
+    bpb = 0;
+    chsd_fail = 0;
     FRESULT r = f_mount(&fs, "", 1);
-    if (r == FR_OK) return OK;
+    if (r == FR_OK) { bpb = bpbNow(); return OK; }
     if (r == FR_NO_FILESYSTEM) return NOT_FAT;
     if (r == FR_NOT_READY) return chsd_init_err == 1 ? NO_CARD : IO;    // 1: CMD0 got no answer; else a card that failed
     return IO;
@@ -216,19 +231,28 @@ Result readText(const char *fin, const char *tmp, char *buf, uint16_t cap, uint1
 Result writeText(const char *fin, const char *tmp, const char *buf, uint16_t len) {
     Result m = mount();
     if (m != OK) return m;
+    if (!len) { f_unlink(tmp); FRESULT r = f_unlink(fin); return r == FR_OK || r == FR_NO_FILE ? OK : IO; }
     return writeVia(fin, tmp, (const uint8_t *)buf, len, nullptr, 0, nullptr);
 }
 
 /// Append to fin (made if absent). A leading line break keeps the new lines apart from an unfinished last one.
-Result appendText(const char *fin, const char *tmp, const char *buf, uint16_t len) {
+static FIL lf;
+static bool lOpen = false;
+Result appendKeep(const char *fin, const char *tmp, const char *buf, uint16_t len) {
     Result m = mount();
     if (m != OK) return m;
     promote(tmp, fin);
-    FIL f;
-    if (f_open(&f, fin, FA_WRITE | FA_OPEN_APPEND) != FR_OK) return IO;
-    bool ok = writeAll(&f, "\n", 1) && writeAll(&f, buf, len);
-    ok = (f_close(&f) == FR_OK) && ok;
-    return ok ? OK : IO;
+    if (f_open(&lf, fin, FA_WRITE | FA_OPEN_APPEND) != FR_OK) return IO;
+    lOpen = true;
+    if (writeAll(&lf, "\n", 1) && writeAll(&lf, buf, len)) return OK;
+    f_close(&lf); lOpen = false;
+    return IO;
+}
+Result appendText(const char *fin, const char *tmp, const char *buf, uint16_t len) {
+    Result r = appendKeep(fin, tmp, buf, len);
+    if (r != OK) return r;
+    lOpen = false;
+    return f_close(&lf) == FR_OK ? OK : IO;
 }
 
 static Result findIn(const char *name, NameFinder &nf) {
@@ -262,9 +286,6 @@ Result namesFind(const char *codes, uint8_t stride, uint8_t n, uint32_t want, ui
 
 // ---- GAMELIST.TXT ----
 
-static FIL lf;
-static bool lOpen = false;
-
 Result listBegin(const char *name) {
     lOpen = f_open(&lf, name, FA_WRITE | FA_CREATE_ALWAYS) == FR_OK && f_flushwin(&fs) == FR_OK;   // its folder entry too
     return lOpen ? OK : IO;
@@ -278,7 +299,7 @@ Result listAdd(const char *line, uint16_t len) {
     return IO;
 }
 
-void listEnd() {
+void listEnd() {                        // (also closes appendKeep's file)
     if (lOpen) f_close(&lf);
     lOpen = false;
 }

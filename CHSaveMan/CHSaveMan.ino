@@ -20,7 +20,7 @@
 #include "TitleFont.h"          // SansBold12 cut to 0x20..0x5A (tools/gen_titlefont.py)
 #include "Names.h"      // the save codes and their games (tools/gen_names.py)
 
-#define SAVM_VERSION "0.19"
+#define SAVM_VERSION "0.20"
 
 enum Col : uint8_t { C_BG, C_PANEL, C_EDGE, C_TEXT, C_DIM, C_HI, C_GOOD, C_BAD, C_WARN };
 
@@ -132,6 +132,12 @@ static bool inFile(const char *code) {
 }
 __attribute__((noinline)) static bool nameKnown(const char *code) { return findCached(code) >= 0 || findLearned(code) >= 0 || findBuiltIn(code); }
 static bool codeKnown(const char *code) { return nameKnown(code) || inFile(code); }     // during a scan
+
+// Two strings equal (0.20: newlib's strcmp is 282 B of flash).
+__attribute__((noinline)) static bool streq(const char *a, const char *b) {
+    while (*a && *a == *b) { a++; b++; }
+    return *a == *b;
+}
 
 // The game a code belongs to (SAVENAME.TXT first, then the table), or the code itself.
 __attribute__((noinline)) static const char *gameName(const char *code) {
@@ -359,7 +365,8 @@ static bool inBak(int i) {
 
 enum Screen : uint8_t { MAIN, PAGE_MENU, CONFIRM, WORKING, MSG, SCANNING, LIST, CHOOSE, DETAIL, SRCLIST };
 enum Op : uint8_t { OP_NONE, OP_ERASE, OP_BACKUP, OP_BACKUP2, OP_READBAK, OP_RESTORE, OP_SCAN, OP_READUND, OP_GAMEBAK,
-                    OP_GAMEBAK2, OP_DETAIL, OP_IGNORE, OP_GAMERES, OP_EXPORT, OP_OFFER, OP_SRCLIST, OP_SRCPICK, OP_ERASE2 };
+                    OP_GAMEBAK2, OP_DETAIL, OP_IGNORE, OP_GAMERES, OP_EXPORT, OP_OFFER, OP_SRCLIST, OP_SRCPICK, OP_ERASE2,
+                    OP_HIDEALL, OP_SHOWALL };
 enum Src : uint8_t { SRC_BAK, SRC_UND, SRC_SAV };
 
 static Screen screen = MAIN;
@@ -574,7 +581,7 @@ static void srcFeed(const char *f, uint8_t n, sdio::Result r, const uint8_t *pg)
         }
     } else {
         snprintf(srcFile, sizeof srcFile, "%s", f);
-        snprintf(srcTmpF, sizeof srcTmpF, "%s", !strcmp(f, "SAVES.BAK") ? "SAVES.TMP" : !strcmp(f, "SAVES.UND") ? "SAVES.UTM" : f);
+        snprintf(srcTmpF, sizeof srcTmpF, "%s", streq(f, "SAVES.BAK") ? "SAVES.TMP" : streq(f, "SAVES.UND") ? "SAVES.UTM" : f);
     }
 }
 
@@ -675,6 +682,31 @@ static void listStep() {
     else if (listTop + listCur >= listN) listCur = listN > listTop ? (uint8_t)(listN - listTop - 1) : 0;
 }
 
+// HIDE ALL WITHOUT SAVES (0.20): passes over GAMELIST.TXT collect the paths of the MISSING ONLY view's games (no
+// clear save code: '-' or unsure) that IGNORE.TXT does not name yet into a batch (listRow's room: the list is read again after), and each batch is
+// appended in the next frame, until a pass finds none. IGNORE.TXT stays within the 1 KB the app reads (TXT_CAP):
+// a game that would not fit is left (IGNORE.TXT FULL). One card job a frame: a pass, or an append.
+static char *const hideBuf = listRow[0];
+static uint16_t hideLen = 0, hideCnt = 0, hideN = 0;
+static bool hideFull = false, hideOpen = false;     // hideOpen: the append is written, IGNORE.TXT closes next frame
+static void hideLine(char *l, uint8_t n) {
+    (void)n;
+    char *sp = strchr(l, ' ');
+    if (l[0] == '#' || !sp) return;
+    *sp = 0;
+    char *e = strchr(sp + 1, ' ');
+    if (e) *e = 0;
+    if (!rowMiss(sp + 1) || ignored(l)) return;
+    uint16_t k = (uint16_t)(sp - l) + 1;
+    if (ignMore || ignLen + 1 + hideLen + k > TXT_CAP) { hideFull = true; return; }
+    if (hideLen + k >= sizeof listRow) return;          // the next pass (a NUL stays at the end: debug STATE)
+    memcpy(hideBuf + hideLen, l, k - 1);
+    hideLen += k;
+    hideBuf[hideLen - 1] = 10;
+    hideBuf[hideLen] = 0;
+    hideCnt++;
+}
+
 // GAMELIST.CSV: file, folder, code, title, why no save is shown (from GAMELIST.TXT and IGNORE.TXT).
 static bool csvOpen = false;
 static uint16_t csvRows = 0;
@@ -769,7 +801,7 @@ static void doOp() {
     } else if (op == OP_READBAK || op == OP_READUND) {
         bool und = op == OP_READUND;
         if (und) { strcpy(srcFile, "SAVES.UND"); strcpy(srcTmpF, "SAVES.UTM"); }
-        bool isBak = !strcmp(srcFile, "SAVES.BAK");
+        bool isBak = streq(srcFile, "SAVES.BAK");
         sdio::Result r = sdio::readRec(srcFile, srcTmpF, buf, 2);
         if (isBak) {
             onCardR = r;
@@ -778,7 +810,7 @@ static void doOp() {
         if (und && r == sdio::NO_FILE) { message("NOTHING TO UNDO", "NO SAVES.UND", C_WARN); return; }
         if (r != sdio::OK) { message(und ? "UNDO FAILED" : "RESTORE FAILED", r == sdio::BAD_FILE && !isBak ? "BAD FILE" : r == sdio::NO_FILE && !isBak ? "FILE IS GONE" : sdText(r), C_BAD); return; }
         if (und) which = 2;
-        src = !strcmp(srcFile, "SAVES.UND") ? SRC_UND : SRC_BAK;
+        src = streq(srcFile, "SAVES.UND") ? SRC_UND : SRC_BAK;
         for (int i = 0; i < 2; i++) {
             inspect(buf + 256 * i, bak[i]);
             const uint8_t *cur = pageAt(i);
@@ -808,7 +840,7 @@ static void doOp() {
         sdio::Result r = srcRead();
         screen = SRCLIST;
         if (r != sdio::OK) message("RESTORE FAILED", sdText(r), C_BAD);
-        else if (srcPickR != sdio::OK) message("RESTORE FAILED", !strcmp(srcFile, "SAVES.BAK") ? sdText((sdio::Result)srcPickR) :
+        else if (srcPickR != sdio::OK) message("RESTORE FAILED", streq(srcFile, "SAVES.BAK") ? sdText((sdio::Result)srcPickR) :
                                                srcPickR == sdio::BAD_FILE ? "BAD FILE" : sdText((sdio::Result)srcPickR), C_BAD, srcFile);
         else if (srcPickN == 2) { chooseOp = OP_READBAK; menuSel = 0; screen = CHOOSE; }
         else if (det.sav.kind != Info::RECORD || !det.sav.valid) message("CAN'T RESTORE", "NOT A VALID SAVE", C_WARN, srcFile);
@@ -827,12 +859,41 @@ static void doOp() {
         menuSel = 0;
         screen = DETAIL;
         namesStale = true;
-    } else if (op == OP_IGNORE) {
+    } else if (op == OP_HIDEALL) {
+        sdio::Result r;
+        bool more;
+        if (hideOpen) {                                 // close IGNORE.TXT (0.20: one append in one frame was 43 ms)
+            sdio::listEnd();
+            hideOpen = false;
+            r = sdio::OK;
+            more = true;
+        } else if (hideLen) {                           // append the batch; close it, then the next pass
+            r = sdio::appendKeep("IGNORE.TXT", "IGNORE.TMP", hideBuf, hideLen);
+            hideN += hideCnt;
+            hideLen = 0;
+            more = hideOpen = r == sdio::OK;
+        } else {
+            hideCnt = 0;
+            onLine = hideLine; lineLen = 0;
+            r = sdio::listFeed((char *)buf, TXT_CAP, &ignLen, &ignMore, lineFeed);
+            lineEnd();
+            ignLen = 0;
+            more = hideLen;
+        }
+        if (r != sdio::OK) { hideLen = 0; message("CAN'T CHANGE", "IGNORE.TXT", C_BAD, sdText(r)); }
+        else if (more) pending = OP_HIDEALL;
+        else {
+            snprintf(rowsMsg, sizeof rowsMsg, "%u GAMES", hideN);
+            message(hideFull ? "IGNORE.TXT FULL" : "HIDDEN", rowsMsg, hideFull ? C_WARN : C_GOOD, "IN IGNORE.TXT");
+        }
+    } else if (op == OP_IGNORE || op == OP_SHOWALL) {
+        // SHOW ALL HIDDEN (0.20) keeps only IGNORE.TXT's # lines; a file with nothing left is removed.
+        bool all = op == OP_SHOWALL;
         uint16_t len = 0;
         bool more = false;
         sdio::Result r = sdio::readText("IGNORE.TXT", "IGNORE.TMP", (char *)buf, TXT_CAP, &len, &more);
         if (r == sdio::OK || r == sdio::NO_FILE) {
-            if (!det.ign) {
+            if (!det.ign && !all) {
                 char l[44];
                 int k = snprintf(l, sizeof l, "%s\n", det.path);
                 r = sdio::appendText("IGNORE.TXT", "IGNORE.TMP", l, (uint16_t)k);
@@ -841,9 +902,10 @@ static void doOp() {
                 char *t = (char *)buf;
                 uint16_t o = 0;
                 for (uint16_t i = 0; i < len; ) {
-                    uint16_t e = i;
+                    uint16_t e = i, a = i;
                     while (e < len && t[e] != 10) e++;
-                    if (!ignLine(t, i, e, det.path)) {
+                    while (a < e && (t[a] == ' ' || t[a] == 13)) a++;
+                    if (a < e && (all ? t[a] == '#' : !ignLine(t, i, e, det.path))) {   // blank lines go too
                         memmove(t + o, t + i, e - i); o += e - i;
                         t[o++] = 10;
                     }
@@ -855,6 +917,7 @@ static void doOp() {
         if (r != sdio::OK) { message("CAN'T CHANGE", "IGNORE.TXT", C_BAD, sdText(r)); return; }
         screen = LIST;
         listLoad = true;
+        if (all) { snprintf(rowsMsg, sizeof rowsMsg, "%u GAMES", listIgn); message("SHOWN AGAIN", rowsMsg, C_GOOD); }
     } else if (op == OP_EXPORT) {
         csvOpen = false; csvRows = 0;
         onLine = csvLine; lineLen = 0;
@@ -1142,7 +1205,8 @@ static void logic() {
             }
             break;
         case CONFIRM: {
-            Screen back = (pending == OP_ERASE || pending == OP_ERASE2 || pending == OP_GAMEBAK2) ? PAGE_MENU : MAIN;
+            Screen back = (pending == OP_ERASE || pending == OP_ERASE2 || pending == OP_GAMEBAK2) ? PAGE_MENU :
+                          pending >= OP_HIDEALL ? LIST : MAIN;
             if (chgame.justPressed(UP_BUTTON | DOWN_BUTTON)) menuSel ^= 1;
             if (b) screen = back;
             if (a) {
@@ -1151,7 +1215,7 @@ static void logic() {
                     screen = WORKING; workWait = 1;
                 } else screen = back;
             }
-            if (screen == MAIN || screen == PAGE_MENU) pending = OP_NONE;
+            if (screen == MAIN || screen == PAGE_MENU || screen == LIST) pending = OP_NONE;
             break;
         }
         case MSG:
@@ -1187,7 +1251,12 @@ static void logic() {
                 listTop = listTop + 2 * LIST_ROWS <= listN ? listTop + LIST_ROWS : listN - LIST_ROWS;
             if (t != listTop) listLoad = true;
             if (chgame.justPressed(SELECT_BUTTON)) { listMode = (uint8_t)((listMode + 1) & 3); listTop = 0; listCur = 0; listLoad = true; }
-            if (startTap) work(OP_EXPORT);
+            // START: ALL and MISSING ONLY: hide every game with no clear save code; IGNORED ONLY: show them all;
+            // SAVES ONLY: GAMELIST.CSV.
+            if (startTap && listMode != 2) {
+                hideLen = hideN = 0; hideFull = false;
+                startConfirm(listMode == 3 ? OP_SHOWALL : OP_HIDEALL);      // (HIDE 0 GAMES?: YES does nothing)
+            } else if (startTap) work(OP_EXPORT);
             else if (a && listN && listTop + listCur < listN) { detWant = listTop + listCur; work(OP_DETAIL); }
             break;
         }
@@ -1237,7 +1306,8 @@ __attribute__((noinline)) static void right(int y, const char *s, uint8_t c) {
     T(128 - 6 - gfx_textWidth(s), y, s, c);
 }
 __attribute__((noinline)) static void titleText(int base, const char *s, uint8_t c) {
-    for (const char *p = s; *p; p++) if (*p > 0x5A) { centre(base - 6, s, c); return; }   // not in TitleFont
+    for (const char *p = s; *p; p++)                    // TitleFont draws space, digits and capitals only
+        if (*p != ' ' && (uint8_t)(*p - '0') > 9 && (uint8_t)(*p - 'A') > 25) { centre(base - 6, s, c); return; }
     gfx_setFont(&TitleFont);
     gfx_text((128 - gfx_textWidth(s)) / 2, base, s, c);
 }
@@ -1335,7 +1405,6 @@ static void drawMain() {
             h = otherFormat(in) ? "ANOTHER GAME'S FORMAT?" : !in.valid ? "DAMAGED SAVE" : in.spare ? "OLD COPY, ERASABLE" :
                 inBak(sel) ? "THE SAME IN SAVES.BAK" : onCardR == sdio::OK ? "NOT IN SAVES.BAK YET" : "A GAME'S SAVE";
         else if (in.kind == Info::OFF) h = "RESTART THE BOARD";
-        else if (in.kind == Info::DAMAGED) h = "A: SEE ITS FIRST BYTES";
     }
     if (sel == 4) h = "FINDS NAMES ON CARD";
     if (sel == 5) h = "GAMELIST.TXT ON CARD";
@@ -1413,7 +1482,7 @@ static const char *lostLine(char *out, int n) {
 // The restore question's three lines (the dialog and the debug state).
 static const char *askTitle() {
     return src == SRC_SAV ? "RESTORE GAME SAVE?" : which != 2 ? (which ? "RESTORE PAGE B?" : "RESTORE PAGE A?") :
-           src == SRC_UND ? "UNDO LAST CHANGE?" : strcmp(srcFile, "SAVES.BK1") ? "RESTORE SAVES.BAK?" : "RESTORE SAVES.BK1?";
+           src == SRC_UND ? "UNDO LAST CHANGE?" : !streq(srcFile, "SAVES.BK1") ? "RESTORE SAVES.BAK?" : "RESTORE SAVES.BK1?";
 }
 static const char *askLines(char *l1, char *l2, char *l3, int n) {
     if (which == 2) { bakLine(l1, n, 0); bakLine(l2, n, 1); }
@@ -1450,12 +1519,6 @@ static void draw() {
             bool rec = in.kind == Info::RECORD;
             snprintf(a, sizeof a, "PAGE %c", 'A' + page);
             snprintf(b, sizeof b, "%s  V%d #%u", rec ? in.magic : "?", in.version, in.seq);
-            if (!rec) {                         // unknown data: its first 16 bytes, so the user can see what it is
-                char h0[28], h1[28];
-                hexOf(h0, pageAt(page), 0); hexOf(h1, pageAt(page), 8);
-                drawDialog(a, h0, h1, "ERASE THIS PAGE", "BACK UP THIS GAME", C_HI, nullptr, "CANCEL");
-                break;
-            }
             drawDialog(a, !rec ? "NOT A GAME SAVE" : otherFormat(in) ? "OTHER FORMAT" : gameName(in.magic), rec ? b : nullptr,
                        "ERASE THIS PAGE", "BACK UP THIS GAME", C_HI, nullptr, "CANCEL");
             break;
@@ -1472,6 +1535,11 @@ static void draw() {
                 else if (in.kind == Info::RECORD && !keeps(in)) snprintf(b, sizeof b, "LOSES %s DATA", cut14(otherFormat(in) ? in.magic : gameName(in.magic)));
                 else snprintf(b, sizeof b, "%s", keeps(in) ? "NO SAVE LOST" : "DATA WILL BE LOST");
                 drawDialog(a, b, keeps(in) ? "AN OLD COPY" : onCardR == sdio::NO_CARD ? "NO CARD: NO UNDO" : "UNDO: SAVES.UND", "NO", "YES", keeps(in) ? C_HI : C_WARN);
+            } else if (pending >= OP_HIDEALL) {
+                bool h = pending == OP_HIDEALL;
+                snprintf(a, sizeof a, h ? "HIDE %u GAMES?" : "SHOW %u GAMES?", h ? listMiss : listIgn);
+                drawDialog(a, h ? "THE MISSING ONES," : "EMPTIES IGNORE.TXT", h ? "TO IGNORE.TXT" : "(# LINES KEPT)",
+                           "NO", "YES", C_WARN);
             } else if (pending == OP_OFFER) {
                 drawDialog("BACK UP NOW?", onCardR == sdio::NO_FILE ? "NO SAVES.BAK YET" : "THE PAGES DIFFER", "FROM SAVES.BAK", "NO", "YES", C_HI);
             } else if (pending == OP_GAMEBAK2) {
@@ -1578,7 +1646,8 @@ static void draw() {
             }
             snprintf(a, sizeof a, "%u-%u", listN ? listTop + 1 : 0, listTop + LIST_ROWS < listN ? listTop + LIST_ROWS : listN);
             T(6, 121, a, C_DIM);
-            right(121, "A:INFO SEL:VIEW START:CSV", C_DIM);
+            right(121, listMode == 2 ? "A:INFO SEL:VIEW START:CSV" : listMode == 3 ? "SEL:VIEW START:SHOW ALL" :
+                       "SEL:VIEW START:HIDE ALL", C_DIM);
             break;
         }
         case SRCLIST: {
@@ -1685,8 +1754,8 @@ static void state() {
     dbg::print(s);
     {
         char r0[sizeof listRow[0]], rc[sizeof listRow[0]];
-        strcpy(r0, listRow[0]); under(r0);
-        strcpy(rc, listRow[listCur < LIST_ROWS ? listCur : 0]); under(rc);
+        snprintf(r0, sizeof r0, "%s", listRow[0]); under(r0);
+        snprintf(rc, sizeof rc, "%s", listRow[listCur < LIST_ROWS ? listCur : 0]); under(rc);
         snprintf(s, sizeof s, "STATE list n=%u miss=%u top=%u row0=%s all=%u ign=%u cur=%u mode=%u rowc=%s\n", listN, listMiss,
                  listTop, r0[0] ? r0 : "-", listAll, listIgn, listCur, listMode, rc[0] ? rc : "-");
         dbg::print(s);

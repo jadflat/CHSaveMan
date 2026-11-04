@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.20 (2026-11-05)
+- GAMES LIST, START (short press): in ALL and MISSING ONLY it asks HIDE n GAMES? (the games with no clear save code,
+  '-' or unsure). YES appends their paths to IGNORE.TXT; existing lines are never changed. It works in passes over
+  GAMELIST.TXT, one card job a frame, and stops at the 1 KB of IGNORE.TXT the app reads (IGNORE.TXT FULL / n
+  GAMES); otherwise HIDDEN / n GAMES / IN IGNORE.TXT. In IGNORED ONLY, START asks SHOW n GAMES? and YES keeps only
+  the # comment lines (the file is removed when nothing is left): SHOWN AGAIN / n GAMES. In SAVES ONLY, START writes
+  GAMELIST.CSV (before 0.20 START wrote the CSV in every view). With a count of 0, YES changes nothing.
+  Footer hints: SEL:VIEW START:HIDE ALL, SEL:VIEW START:SHOW ALL, A:INFO SEL:VIEW START:CSV.
+- SHOW IT AGAIN (one game) also drops blank lines and removes IGNORE.TXT when nothing is left (0.19 left a 1-byte file).
+- Card: a full mount (card init, about 11 ms on the board) only when the card may have changed; otherwise one
+  boot-sector read and a BPB check. A failed sector read or write, or a different BPB, mounts afresh. Every card job
+  is quicker.
+- Flash fit: newlib's strcmp replaced (-0.26 KB); FAT12 volumes (under about 16 MB) are no longer mounted (CARD NOT
+  FAT32); the title font's punctuation has no picture (a save code with punctuation is drawn in the small font); the
+  page menu no longer shows an UNKNOWN DATA page's first 16 bytes (debug STATE still has them).
+- Tests: new `tools/tests/sim_v020.py` (HIDE ALL from MISSING and ALL, counts, hand-written lines kept, a rescan
+  keeps them hidden, SHOW ALL keeps # lines or removes the file, a 70-game hide stops at 1 KB with whole lines).
+  host_fatfs has 195 checks. sim_save.py and extra_features.py press START for the CSV in SAVES ONLY.
+- Board (78 games, a debug build with GAMES LIST and the dialogs kept): HIDE ALL hid the 9 MISSING games, a rescan
+  kept them hidden, SHOW ALL brought them back (IGNORE.TXT removed). Worst frames: a pass 32.3 ms, an append 31.2 ms
+  (one append in one frame was 43 ms: the file is now closed in the next frame, 20.1 ms), SHOW ALL 31.1 ms. Still
+  over 30 fps: opening or scrolling GAMES LIST (39.5 ms of card work, since 0.10).
+- Image 50,428 B of 50,432, RAM about 16.9 KB.
+
 ## 0.19 (2026-11-04, measured on the board)
 - The scan, measured on the board (78 games, a debug build with GAMES LIST kept and other screens left out to fit):
   12.3 s (0.18: 36-37 s), worst frame 31.1 ms (0.18: 36-37 ms during the scan, 39.3 ms at its start, 47.1 ms at

@@ -16,10 +16,10 @@
 
 ## Tests
 
-`./cl check` runs everything (ALL GOOD at 0.19): the host test, the scripts, the five simulator test files
+`./cl check` runs everything (ALL GOOD at 0.20): the host test, the scripts, the six simulator test files
 (`tools/game.py` lists them) and the device build. On their own:
 
-- `./cl test`: `tools/tests/host_fatfs.cpp`, 193 checks. The board's card code (`src/sd/sdio_dev.cpp`) and FatFs
+- `./cl test`: `tools/tests/host_fatfs.cpp`, 195 checks. The board's card code (`src/sd/sdio_dev.cpp`) and FatFs
   with the board's `ffconf.h`, on a RAM disk formatted FAT16 (2 KB and 32 KB clusters) and FAT32 (MBR, 512 B
   clusters): NO_CARD / IO / NOT_FAT mounts; SAVES.BAK / .BK1 / .UND, the SAVES folder, .SAV / .SV1 renames;
   the disk image after every sector write of a backup, an undo, a .SAV and a SAVENAME.TXT append (each reads as

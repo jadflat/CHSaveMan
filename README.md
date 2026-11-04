@@ -17,13 +17,14 @@ them, which game each save belongs to, and lets you back them up to the SD card,
 PAGES...). Every restore and erase first writes the pages as they were to `SAVES.UND` (UNDO LAST CHANGE puts them
 back) and every page write is read back, but the software comes with no warranty (GPL-3.0, sections 15-16).
 
-**Status:** v0.19, board-tested. v0.18 ran on a real board with a real card: a real game's save round trip
+**Status:** v0.20, board-tested (v0.19 facts below). On the board (78 games) HIDE ALL hid the 9 MISSING games, they stayed hidden after a rescan and SHOW ALL
+brought them back; its worst frames: a pass 32.3 ms, an append 31.2, the close 20.1, SHOW ALL 31.1 (30 fps: 33.3). v0.18 ran on a real board with a real card: a real game's save round trip
 (back up, erase, restore, the game loads it), a save and a power cycle, the NO CARD and CARD ERROR screens (the
 driver's test switch, card in the slot) and a new game's SAVENAME.TXT append. v0.19 was measured on the board
 with 78 games on the card: the scan takes 12.3 s (0.18: 36-37 s) and its worst frame is 31.1 ms (0.18: 47 ms;
 30 fps needs 33.3 ms); GAMES LIST shows the games right after the scan. Still needs a card physically out of the
 slot: NO CARD with an empty slot (the 250 ms CMD0 timeout); a non-FAT card (exFAT / NTFS) showing CARD NOT FAT32.
-Image 49,952 B of 50,432, RAM 16,908 B.
+Image 50,428 B of 50,432, RAM about 16.9 KB.
 
 ## What it does
 
@@ -44,7 +45,7 @@ Image 49,952 B of 50,432, RAM 16,908 B.
 - **FIND GAME NAMES:** scans `.CHG` files in `GAMES` and two levels of sub-folders (B stops it) and rewrites
   `GAMELIST.TXT`.
 - **GAMES LIST:** UP / DOWN move (hold to repeat), LEFT / RIGHT page, SELECT cycles ALL / MISSING ONLY / SAVES ONLY
-  / IGNORED ONLY, a short START press writes `GAMELIST.CSV`, A opens a game's details, B goes back. Rows are tagged
+  / IGNORED ONLY, a short START press hides all games without a clear save code (ALL, MISSING ONLY: HIDE ALL), shows them again (IGNORED ONLY: SHOW ALL) or writes `GAMELIST.CSV` (SAVES ONLY), A opens a game's details, B goes back. Rows are tagged
   A / B (that page holds the game now) and + (SAVES.BAK holds it).
 - **Game details:** path, title, the name shown and where it came from, scan result (with candidates when UNSURE),
   flash page, backup status. Options: RESTORE ITS SAVE (from its `.SAV`), BACK UP ITS SAVE, IGNORE THIS GAME / SHOW
@@ -60,14 +61,14 @@ Image 49,952 B of 50,432, RAM 16,908 B.
 
 ## The SD card
 
-FAT16 or FAT32 only (FatFs is built without exFAT): a card that answers but is exFAT, NTFS or unformatted shows
+FAT16 or FAT32 only; FAT12 cards (under about 16 MB) are not supported and show CARD NOT FAT32 (FatFs is built without exFAT): a card that answers but is exFAT, NTFS or unformatted shows
 CARD NOT FAT32, an empty slot NO CARD. Cards over 32 GB usually come exFAT: format them FAT32. Games are looked for
 in `GAMES` and its sub-folders (the CHGame menu's layout).
 
 ## Controls
 
 UP / DOWN choose, A picks, B goes back. Hold START for 3 s to return to the CHGame menu (the app counts
-90 frames itself; the library's own count would take 6 s at 30 fps). In GAMES LIST a short START press writes the CSV.
+90 frames itself; the library's own count would take 6 s at 30 fps). In GAMES LIST a short START press hides, shows or writes the CSV, by view.
 
 ## Files on the card
 
@@ -87,10 +88,10 @@ Root of the card unless stated.
   than `GAMES/X/Y` were skipped.
 - `IGNORE.TXT`: one game per line, its path under `GAMES` or just its file name, any case; `#` comments. Ignored games
   are left out of the list counts (see IGNORED ONLY). The app appends and removes lines; a scan never touches it.
-  Only the first 1 KB (about 50 games) is used.
+  Only the first 1 KB (about 50 games) is used. In GAMES LIST, START hides all games without a clear save code (it appends their paths, never changing a line) or, in IGNORED ONLY, shows all again (only `#` lines stay; the file is removed when empty).
 - `SAVENAME.TXT`: lines `CODE=NAME`, `#` comments. Its names win over the built-in table; the app only appends.
   Use it to name a game the scan marks UNSURE.
-- `GAMELIST.CSV`: written from GAMES LIST with START: header `file,folder,code,title,reason missing`, CRLF lines;
+- `GAMELIST.CSV`: written from GAMES LIST with START in SAVES ONLY: header `file,folder,code,title,reason missing`, CRLF lines;
   reason is no save code found / unsure: several codes / ignored / both.
 
 ## Build and test
@@ -103,7 +104,7 @@ pyserial and Pillow, and on Windows Git Bash plus a gcc for the host tests (w64d
     ./cl test                                            host test: the board's card code + FatFs on a RAM disk
     ./cl check                                           everything: host test, scripts, all simulator tests, build
     python CHSaveMan/tools/tests/sim_save.py             one simulator test file (also extra_safety.py,
-                                                         extra_features.py, sim_round3.py, sim_v019.py)
+                                                         extra_features.py, sim_round3.py, sim_v019.py, sim_v020.py)
     python CHSaveMan/tools/gen_names.py <CHGame checkout>  Names.h from CHGame's examples + names_extra.txt
     python CHSaveMan/tools/gen_titlefont.py              TitleFont.h (SansBold12 cut to the title characters)
     python CHSaveMan/tools/make_pubcard.py               a public sim card for the README pictures (pictures.txt)
