@@ -31,7 +31,8 @@ enum Result : uint8_t {
     IO,           // a read or write on the card failed (or did not verify)
     DONE,         // scanNext: no more files
     BUSY,         // scanNext: part of a .CHG read, call again (one call reads at most SCAN_STEP bytes)
-    NO_GAMES      // scanBegin: the card has no GAMES folder
+    NO_GAMES,     // scanBegin: the card has no GAMES folder
+    WAIT          // scanNext with scanRoom set: no room this frame for the next folder step or file open
 };
 
 uint32_t crc32(const uint8_t *p, uint32_t n);
@@ -91,7 +92,13 @@ static const uint8_t SCAN_CODES = 6;
 #ifndef SAVM_SCAN_STEP
 #define SAVM_SCAN_STEP 2048     // the host test builds other values (tools/tests/host_fatfs.cpp)
 #endif
-static const uint16_t SCAN_STEP = SAVM_SCAN_STEP;   // bytes of a .CHG read per scanNext call (4 KB: up to 20 ms on the board)
+static const uint16_t SCAN_STEP = SAVM_SCAN_STEP;   // bytes of a .CHG read per scanNext call without scanRoom
+// The board (0.19): scanRoom(us) says whether `us` more card time fits in this frame. A call then reads sectors
+// until it does not fit one more (SCAN_SEC_US), and a folder step or a file open (one of them a call) starts only
+// with SCAN_OPEN_US left (else WAIT). The first call of a frame must always have room for both. Null: SCAN_STEP.
+static const uint16_t SCAN_SEC_US = 3000;       // one 512-byte sector: read 0.4 ms, scanned 0.4 ms; a FAT read more
+static const uint16_t SCAN_OPEN_US = 11000;     // board, 0.18: a .CHG open with its header at most 9.6 ms
+extern bool (*scanRoom)(uint16_t us);
 
 struct ScanItem {
     char title[33];             // trimmed, NUL-terminated (non-printables are '?')
@@ -113,12 +120,13 @@ struct Scan {
 
 /// OK, NO_GAMES (nothing to scan), NO_CARD, NOT_FAT, IO.
 Result scanBegin(Scan &s);
-/// OK: item filled from the next .CHG. BUSY: call again. DONE: no more files. NO_CARD / IO: stop.
+/// OK: item filled from the next .CHG. BUSY: call again. WAIT: call again next frame. DONE: no more files. NO_CARD / IO: stop.
 Result scanNext(Scan &s, ScanItem &item);
 /// Close whatever the scan has open (after DONE it is a no-op). Call it before any other card call.
 void scanEnd(Scan &s);
 
-// GAMELIST.TXT: the last scan's games, one line each. listBegin/listAdd/listEnd run during a scan (no remount);
+// GAMELIST.TXT: the last scan's games, one line each. listBegin/listAdd/listEnd run during a scan (no remount; a
+// listAdd writes its sector at once, so no later scanNext call has to);
 // listFeed reads it (mounts: never during a scan). listFeed: OK, NO_FILE, NO_CARD, NOT_FAT, IO.
 /// Open `name` (GAMELIST.TXT during a scan, GAMELIST.CSV in an export) for writing; no mount.
 Result listBegin(const char *name);

@@ -266,13 +266,14 @@ static FIL lf;
 static bool lOpen = false;
 
 Result listBegin(const char *name) {
-    lOpen = f_open(&lf, name, FA_WRITE | FA_CREATE_ALWAYS) == FR_OK;
+    lOpen = f_open(&lf, name, FA_WRITE | FA_CREATE_ALWAYS) == FR_OK && f_flushwin(&fs) == FR_OK;   // its folder entry too
     return lOpen ? OK : IO;
 }
 
 Result listAdd(const char *line, uint16_t len) {
     if (!lOpen) return IO;
-    if (writeAll(&lf, line, len)) return OK;
+    // FF_FS_TINY: the line sits in fs.win; written now, not by whichever scan step next moves the window.
+    if (writeAll(&lf, line, len) && f_flushwin(&fs) == FR_OK) return OK;
     f_close(&lf); lOpen = false;
     return IO;
 }
@@ -323,6 +324,7 @@ void (*scanSkip)(const char *path, const char *why) = nullptr;
 #endif
 
 static chgscan::ChgScan sc;     // the read buffer and the codes; only used inside scanNext
+bool (*scanRoom)(uint16_t us) = nullptr;
 
 // Folders: GAMES (level 0), its sub-folders (1) and theirs (2, e.g. GAMES/OTHER/CARDS, as the menu shows them).
 static const uint8_t DEPTH = 3;
@@ -367,9 +369,10 @@ static Result openChg(Priv *p, const char *path, FSIZE_t fsize, ScanItem &item) 
     return res;
 }
 
-// Read up to SCAN_STEP bytes of the open .CHG. OK: finished (item filled). BUSY: more. IO: a read failed.
+// Read the open .CHG while scanRoom has room for a sector (no scanRoom: SCAN_STEP bytes; one sector always).
+// OK: finished (item filled). BUSY: more. IO: a read failed.
 static Result readSome(Priv *p, ScanItem &item) {
-    for (uint16_t done = 0; p->left && done < SCAN_STEP; ) {
+    for (uint16_t done = 0; p->left && (scanRoom ? !done || scanRoom(SCAN_SEC_US) : done < SCAN_STEP); ) {
         UINT n = p->left < chgscan::CHUNK ? (UINT)p->left : chgscan::CHUNK, r = 0;
         if (f_read(&p->f, sc.chunk(), n, &r) != FR_OK || r != n) { f_close(&p->f); p->inFile = 0; return IO; }
         sc.feed((uint16_t)n);
@@ -418,6 +421,7 @@ static Result scanOne(Scan &s, ScanItem &item) {
         return r;
     }
     if (s.state != S_RUN) return DONE;
+    if (scanRoom && !scanRoom(SCAN_OPEN_US)) return WAIT;  // this step may open a file or a folder
     char path[6 + 13 * DEPTH + 1];              // GAMES/8.3/8.3/8.3 (FF_USE_LFN 0)
     for (uint8_t seen = 0;; seen++) {
         if (seen >= 16) return BUSY;            // a long folder: the rest next call (one call stays short)

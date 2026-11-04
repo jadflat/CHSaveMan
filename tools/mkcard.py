@@ -16,6 +16,9 @@ RSV = 32
 
 
 def default_sources(n):
+    if not os.path.exists(TRUTH):
+        raise SystemExit("no CHSaveMan/tools/tests/scan_truth.txt (a local list of your own .CHG files, not in the "
+                         "repository): pass the folders or .CHG files to put on the card")
     seen, out, nocode = set(), [], 0
     for ln in open(TRUTH, encoding="utf-8"):
         if ln.startswith("#") or not ln.strip():

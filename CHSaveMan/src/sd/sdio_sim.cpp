@@ -63,7 +63,7 @@ static uint32_t mounts = 0;
 static Result mount() {
     if (!mounts++ && !getenv("SAVM_BAK")) {     // the default backup files start afresh: script runs repeat exactly
         std::error_code ec;
-        for (const char *e : { "", ".tmp", ".bk1", ".und", ".utm" }) std::filesystem::remove(bakPath() + e, ec);
+        for (const char *e : { "", ".tmp", ".bk1", ".und", ".utm", ".un2", ".u2t" }) std::filesystem::remove(bakPath() + e, ec);
     }
     if (!strcmp(env("SAVM_NOCARD"), "1") || fault("nocard")) return NO_CARD;
     if (!strcmp(env("SAVM_NOCARD"), "fat") || fault("nofat")) return NOT_FAT;
@@ -299,6 +299,7 @@ Result fileFeed(const char *path, void (*feed)(char c)) {
 }
 
 void (*scanSkip)(const char *path, const char *why) = nullptr;     // debug builds only use it
+bool (*scanRoom)(uint16_t us) = nullptr;                          // the app sets it on the board only
 
 Result scanBegin(Scan &s) {
     s.fileIndex = 0;

@@ -1,14 +1,11 @@
 """Names.h: the four-character save codes (save::magic("XXXX")) and the game each belongs to.
 
-    python tools/gen_names.py [--root <Arduino folder>] [--root <more>] ...
+    python tools/gen_names.py <CHGame checkout>
 
-Sources of truth, in order:
-  1. tools/names_extra.txt   `CODE=NAME` lines (a hand-kept list: wins over everything, for games not in a folder here)
-  2. every sketch under the roots with a save::magic("XXXX") in its code: the NAME is the "title" in the nearest
-     chgame.json above the file (else the folder's name).
-
-Writes the generated header beside the sketch (Names.h): never edit it by hand. Re-run it when a game is added.
-Prints the codes two games share (they would overwrite each other's saves).
+Only public games, so the table can ship: CHGame's own examples (<checkout>/platform/board/arduino/CHGame/
+libraries/CHGame/examples/Games) and tools/names_extra.txt (`CODE=NAME` lines, public games only; they win).
+Every other game's name is learned on the card: FIND GAME NAMES reads each .CHG's title and appends it to
+SAVENAME.TXT. Writes Names.h beside the sketch: never edit it by hand. Prints the codes two games share.
 """
 import json
 import re
@@ -18,8 +15,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SKETCH = HERE.parent
 MAGIC = re.compile(r'save::magic\("([^"]{4})"\)')
-SKIP = {"chgame", "build", "out", "dist", ".claude", "StarLiftGBAFS", "CHGame-catalogue", "CHGame_Emulator-windows-latest_x86_64",
-        "pico 8 port original folders", "Save_File_Viewer", "gen", "head", "__pycache__", "node_modules", ".git", "CHSaveMan"}
+SKIP = {"build", "out", "__pycache__", ".git"}
+EXAMPLES = Path("platform/board/arduino/CHGame/libraries/CHGame/examples/Games")
 NAME_LEN = 14
 EXTS = {".ino", ".cpp", ".h", ".c"}
 
@@ -59,15 +56,9 @@ def clean(name):
 
 
 def main():
-    roots = []
-    a = sys.argv[1:]
-    while a:
-        if a[0] == "--root":
-            roots.append(Path(a[1])); a = a[2:]
-        else:
-            raise SystemExit(__doc__)
-    if not roots:
-        raise SystemExit("give at least one --root (the Arduino folder, the CHGame checkout's examples/Games)")
+    if len(sys.argv) != 2 or not (Path(sys.argv[1]) / EXAMPLES).is_dir():
+        raise SystemExit(__doc__)
+    roots = [Path(sys.argv[1]) / EXAMPLES]
     names = {}
     clash = []
     for r in roots:

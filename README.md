@@ -1,22 +1,29 @@
 # CHSaveMan: a save manager for CHGame
 
+![SaveMan](docs/banner.png)
+
 Every CHGame game keeps its save in two shared flash pages (0xF500 and 0xF600). This app shows what is in
 them, which game each save belongs to, and lets you back them up to the SD card, restore them, or erase a page.
 
-**Status:** v0.18. v0.11 ran on a real board with a real card (74 games). v0.12 to v0.18 are tested only on the
-PC: the simulator (sim_save 183, extra_safety 59, extra_features 23, sim_round3 126 checks) and a host test of the
-board's own card code and FatFs on a RAM disk (host_fatfs, 159 checks). They have not run on a board. Image
-50,308 B of 50,432 (124 B free), RAM 16,892 B; a debug build no longer fits.
+![GAMES LIST](docs/screenshot.png) ![The lander lifting a save](docs/lift.gif)
 
-**Still untested, because it needs real hardware:**
+## Install
 
-- NO CARD with the card physically out of the slot (the simulator and the host test fake the driver's answer;
-  the 250 ms CMD0 timeout and the init-error mapping in `src/sd/disk.cpp` have never run with an empty slot).
-- A non-FAT card (exFAT / NTFS / unformatted) showing CARD NOT FAT32 (tested only with a blank RAM disk).
-- A real game's round trip: save in StarLift 0.38 (code SLFT, needs its new STARLIFT.DAT on the card), back up,
-  erase, restore, and the game loads its save.
-- The 0.18 scan frame time (modelled at 25.5 ms worst; measure it on the board) and the scan's duration.
-- A NEW game's SAVENAME.TXT append on the real card (every game on the test card was already known).
+1. Copy `dist/SAVEMAN.CHG` (or the release's `SAVEMAN.CHG`) to the `GAMES` folder of the CHGame's SD card
+   (FAT16 or FAT32).
+2. On the board, pick SAVE MANAGER from the menu. Hold START for 3 s to go back to the menu.
+
+**Safety, no warranty.** SaveMan writes the flash save pages every CHGame game shares. Back up first (BACK UP
+PAGES...). Every restore and erase first writes the pages as they were to `SAVES.UND` (UNDO LAST CHANGE puts them
+back) and every page write is read back, but the software comes with no warranty (GPL-3.0, sections 15-16).
+
+**Status:** v0.19, board-tested. v0.18 ran on a real board with a real card: a real game's save round trip
+(back up, erase, restore, the game loads it), a save and a power cycle, the NO CARD and CARD ERROR screens (the
+driver's test switch, card in the slot) and a new game's SAVENAME.TXT append. v0.19 was measured on the board
+with 78 games on the card: the scan takes 12.3 s (0.18: 36-37 s) and its worst frame is 31.1 ms (0.18: 47 ms;
+30 fps needs 33.3 ms); GAMES LIST shows the games right after the scan. Still needs a card physically out of the
+slot: NO CARD with an empty slot (the 250 ms CMD0 timeout); a non-FAT card (exFAT / NTFS) showing CARD NOT FAT32.
+Image 49,952 B of 50,432, RAM 16,908 B.
 
 ## What it does
 
@@ -31,7 +38,8 @@ board's own card code and FatFs on a RAM disk (host_fatfs, 159 checks). They hav
   with the games in each; pick one, then the page chooser and the question (what each page holds now and what it
   would hold, with LOSES warnings and version changes such as `V3 -> V2`). Every page write is read back.
 - **Undo:** before every restore and erase the two pages are written to `SAVES.UND`; UNDO LAST CHANGE puts them back
-  (undoing twice swaps back). A restore stops if the undo file cannot be written.
+  (undoing twice swaps back). A restore stops if the undo file cannot be written. An undo writes the pages it replaces
+  to `SAVES.UN2` and replaces `SAVES.UND` only after its pages are in flash, so a power cut keeps both.
 - **Erase a page:** asks first and warns when it is the only copy of a game's save.
 - **FIND GAME NAMES:** scans `.CHG` files in `GAMES` and two levels of sub-folders (B stops it) and rewrites
   `GAMELIST.TXT`.
@@ -41,8 +49,10 @@ board's own card code and FatFs on a RAM disk (host_fatfs, 159 checks). They hav
 - **Game details:** path, title, the name shown and where it came from, scan result (with candidates when UNSURE),
   flash page, backup status. Options: RESTORE ITS SAVE (from its `.SAV`), BACK UP ITS SAVE, IGNORE THIS GAME / SHOW
   IT AGAIN.
-- **Names:** a built-in table (`Names.h`) and `SAVENAME.TXT`, which wins and has no size cap on names. New codes
-  found by a scan are appended (up to 32 a scan; NAME LIST FULL means scan again for the rest).
+- **Names:** a built-in table (`Names.h`: public games only, CHGame's examples, CHix, StarLift, CHarth) and
+  `SAVENAME.TXT` on the card, which wins and has no size cap. Every other game is learned on your own card: FIND
+  GAME NAMES reads each game's title and appends `CODE=TITLE` (up to 32 new a scan; NAME LIST FULL means scan
+  again for the rest).
 - **Page A may hold game code:** a game over 50,432 bytes reaches into page A. SaveMan shows GAME CODE only when its own
   image covers page A; otherwise page A holds the tail of that game's code and reads UNKNOWN DATA. That is
   harmless (such a game never reads page A, and flashing it rewrites the page); BACK UP and RESTORE copy it as is.
@@ -63,7 +73,8 @@ UP / DOWN choose, A picks, B goes back. Hold START for 3 s to return to the CHGa
 
 Root of the card unless stated.
 
-- `SAVES.BAK`, `SAVES.BK1` (the backup before), `SAVES.UND` (the pages before the last restore or erase): 528 bytes,
+- `SAVES.BAK`, `SAVES.BK1` (the backup before), `SAVES.UND` (the pages before the last restore or erase; `SAVES.UN2`
+  the pages before the last undo): 528 bytes,
   little-endian: `"CHSVBK01"` (8), CRC-32 of the pages (u32), page count (u16, 2), set count (u16, 1), then page A
   (0xF500) and page B (0xF600), 256 bytes each. Temp files `.TMP` / `.UTM` (and `SAVES/<CODE>.TMP`) can be left by a
   power cut; they are read in place of the missing file and renamed by the next write.
@@ -84,13 +95,18 @@ Root of the card unless stated.
 
 ## Build and test
 
+Needs: Arduino CLI with the CHGame board package (`CHGame:ch32v`, see the CHGame repository), Python 3 with
+pyserial and Pillow, and on Windows Git Bash plus a gcc for the host tests (w64devkit: put its `bin` on PATH).
+
     ./cl build                                           flash and RAM
     ./cl run CHSaveMan/tools/scripts/smoke.txt out/smoke   screenshots
     ./cl test                                            host test: the board's card code + FatFs on a RAM disk
     ./cl check                                           everything: host test, scripts, all simulator tests, build
     python CHSaveMan/tools/tests/sim_save.py             one simulator test file (also extra_safety.py,
-                                                         extra_features.py, sim_round3.py)
-    python CHSaveMan/tools/gen_names.py --root <Arduino folder> --root <CHGame examples/Games>
+                                                         extra_features.py, sim_round3.py, sim_v019.py)
+    python CHSaveMan/tools/gen_names.py <CHGame checkout>  Names.h from CHGame's examples + names_extra.txt
+    python CHSaveMan/tools/gen_titlefont.py              TitleFont.h (SansBold12 cut to the title characters)
+    python CHSaveMan/tools/make_pubcard.py               a public sim card for the README pictures (pictures.txt)
 
 The simulator's card is a host file (`savm_sim.bak`, or `$SAVM_BAK`) and a folder (`$SAVM_CARD`).
 `$SAVM_NOCARD` (`1`, `fat`, `err`) and `$SAVM_FAIL` (`io`, `crc`, `scan`, `append`, `read`, `cut`) fake card
@@ -99,11 +115,12 @@ faults; see `src/sd/sdio_sim.cpp`.
 ## Needs the save library's raw page calls
 
 `save::rawPage()` and `save::rawWrite()` (and the flash-ownership change) are in the CHGame library's
-`Save.h`/`Save.cpp`; `chgame/` here carries that version.
+`Save.h`/`Save.cpp`; `chgame/` here carries that modified version (see `chgame/PATCHES.md`).
 
 ## Licence and credits
 
 GPL-3.0-or-later (see LICENSE): the SD card driver (Sd2Card, identical) and the FatFs glue (disk.cpp, given a
 250 ms CMD0 timeout here) come from the CHSDtoSerial app in CHGame (Kevin Bates, bateske), itself derived from
 William Greiman's sdfatlib (GPL-3.0); CHSaveMan/NOTICE lists exactly what was changed. FatFs is by ChaN (its own
-licence, `CHSaveMan/src/fatfs/FatFs-LICENSE.txt`). Built on CHGame, Copyright 2026 Kevin Bates, Apache-2.0.
+licence, `CHSaveMan/src/fatfs/FatFs-LICENSE.txt`). Built on CHGame, Copyright 2026 Kevin Bates, Apache-2.0; the title font is CHGfx's SansBold12 (DejaVu Sans Bold).
+Artwork (`docs/`) made by `tools/make_media.py` from STARLIFT's sprites.

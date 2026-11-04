@@ -1074,6 +1074,9 @@ static FRESULT sync_window (	/* Returns FR_OK or FR_DISK_ERR */
 	}
 	return res;
 }
+
+/* CHSaveMan: write the window if it is dirty (FF_FS_TINY: a file's partial sector lives there) */
+FRESULT f_flushwin (FATFS* fs) { return sync_window(fs); }
 #endif
 
 

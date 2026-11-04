@@ -1,3 +1,6 @@
+// MODIFIED for CHSaveMan (Apache-2.0 section 4(b)), against upstream bateske/CHGame e1f8d05: save::rawPage() and
+// save::rawWrite() (whole-page access for a save manager), the flash-ownership rule (status(), BLOCKED,
+// allowOverwrite()), save backends with slots (useBackend(), slots()). See chgame/PATCHES.md.
 /// @file Save.h
 /// @brief Saving: a record in flash that survives power cycles and re-uploads.
 ///

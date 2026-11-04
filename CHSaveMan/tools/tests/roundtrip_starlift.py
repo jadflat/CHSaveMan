@@ -6,7 +6,7 @@ to --out for STARLIFT's simulator to boot on.
     python CHSaveMan/tools/tests/roundtrip_starlift.py --pages PAGES.bin --out RESTORED.bin [--shots DIR]
 
 Only a test shim is added (written to tools/tests/out/rt_starlift/, built into its own sim.exe there): the
-library's simulator pages are loaded from and dumped to $CHSIM_SAVEFILE, as CHPicoTennis's save_file.cpp does.
+library's simulator pages are loaded from and dumped to $CHSIM_SAVEFILE, as a game's own simulator save file would.
 The app's code is built unchanged. Reuses sim_save.py's helpers (as sim_round3.py does)."""
 import argparse
 import os

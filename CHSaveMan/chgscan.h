@@ -224,8 +224,11 @@ struct ChgScan {
         if ((pos + p) & 1) p++;                     // instructions sit at even payload offsets
         for (; p + 4 <= total; p += 2) {
             if (!last && p + AHEAD > total) break;  // not all here yet: carry it
-            uint32_t w = le32(buf + p);
-            if ((w & 0x7F) != 0x37 || !((w >> 7) & 31)) continue;
+            // A lui (rd not 0) whose top two bytes can still give a printable code: the addi moves them by at most
+            // 1, so each must be 0x20..0x7F (0.19: skips look() for addresses and most other constants, 2x faster).
+            const uint8_t *b = buf + p;
+            if ((b[0] & 0x7F) != 0x37 || !((b[0] >> 7) | (b[1] & 15)) || (uint8_t)(b[2] - 0x20) > 0x5F ||
+                (uint8_t)(b[3] - 0x20) > 0x5F) continue;
             uint32_t v;
             uint16_t end = p + AHEAD < total ? p + AHEAD : total;
             uint8_t s = look(p, end, &v);

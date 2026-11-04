@@ -1,6 +1,6 @@
 # Fake records in both pages, look at them, back up, erase, restore.
 wait 5
-say W 0 BECK 1 5 40
+say W 0 SLFT 1 5 40
 say W 1 CHBB 1 9 60
 wait 3
 snap 01_main

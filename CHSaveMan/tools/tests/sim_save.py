@@ -255,10 +255,10 @@ check(ask()[1] == "B  CHAA  SAME", "a page that matches SAVES.BAK says SAME: %r"
 s.tap("DOWN"); s.tap("A"); s.frames(6)
 check(state()["names"]["writes"] == "A", "a page that already matches is not rewritten")
 s.tap("A")
-say("W 0 CHIX 1 3 40", "W 1 BECK 1 4 40")             # two other games' saves: both would be lost
+say("W 0 CHIX 1 3 40", "W 1 SLFT 1 4 40")             # two other games' saves: both would be lost
 goto(3); s.tap("A"); both(); s.frames(3)
 q = ask()
-check(q == ["A CHIX -> CHAA", "B BECKON -> CHAA OLD", "LOSES 2 GAMES' SAVES"], "two saves lost: %r" % q)
+check(q == ["A CHIX -> CHAA", "B STARLIFT -> CHAA OLD", "LOSES 2 GAMES' SAVES"], "two saves lost: %r" % q)
 s.tap("B"); s.frames(2)
 say("W 1 CHAA 1 9 40")                                # only CHIX is lost (CHAA is in SAVES.BAK)
 goto(3); s.tap("A"); both(); s.frames(3)
@@ -690,7 +690,7 @@ chg(cg / "GAMES" / "NOSAVE.CHG", "No Save", [])
 chg(cg / "GAMES" / "TIE.CHG", "Tie Game", ["CHIX", "QQZ9"])          # a tie with one known code: CHIX
 chg(cg / "GAMES" / "MORE" / "READER.CHG", "Card Reader", [])
 start(card=cg)
-say("W 0 CHAA 1 5 40", "W 1 BECK 1 4 40")
+say("W 0 CHAA 1 5 40", "W 1 SLFT 1 4 40")
 goto(0); s.tap("A"); s.tap("DOWN"); s.tap("A"); s.frames(6)
 sav = cg / "SAVES" / "CHAA.SAV"
 d = sav.read_bytes() if sav.exists() else b""
@@ -739,7 +739,7 @@ def restore_sav(name="CHAA.SAV"):
     s.tap("A"); s.frames(4)
 
 
-say("E 0", "W 1 BECK 1 4 40")
+say("E 0", "W 1 SLFT 1 4 40")
 open_row("CHAA.CHG")
 D = det_state()
 check(screen().startswith("STATE screen=8") and D["code"] == "CHAA" and D["sav"] == "0" and D["savseq"] == "9" and D["shown"] == "GAME_AA",
@@ -750,7 +750,7 @@ q = ask()
 check(q == ["A EMPTY -> GAME AA", "FROM SAVES/CHAA.SAV", ""], "a .SAV goes to the empty page: %r" % q)
 s.tap("DOWN"); s.tap("A"); s.frames(6)
 p = state()
-check(p["A"][:3] == (3, "CHAA", 9) and p["B"][1] == "BECK" and "SAVES/CHAA.SAV" in p["screen"], "restored from the .SAV into A: %r" % (p["A"],))
+check(p["A"][:3] == (3, "CHAA", 9) and p["B"][1] == "SLFT" and "SAVES/CHAA.SAV" in p["screen"], "restored from the .SAV into A: %r" % (p["A"],))
 s.tap("A")
 # Both pages hold the game: the older one gets the .SAV, with a counter past the newer.
 say("W 0 CHAA 1 20 40", "W 1 CHAA 1 21 40")
@@ -761,12 +761,12 @@ p = state()
 check(p["A"][:5] == (3, "CHAA", 22, True, False) and p["B"][2] == 21, "the restored record is #22 (past #21), valid, the newest: %r" % (p["A"],))
 s.tap("A")
 # No free page: asked which, and the loss is named.
-say("W 0 CHIX 1 3 40", "W 1 BECK 1 4 40")
+say("W 0 CHIX 1 3 40", "W 1 SLFT 1 4 40")
 restore_sav()
 check(screen().startswith("STATE screen=7"), "no empty page: RESTORE INTO WHICH PAGE? " + screen())
 s.tap("DOWN"); s.tap("A"); s.frames(3)
 q = ask()
-check(q[0] == "B BECKON -> GAME AA" and q[2] == "LOSES BECKON SAVE", "into B: the BECKON save is named: %r" % q)
+check(q[0] == "B STARLIFT -> GAME AA" and q[2] == "LOSES STARLIFT SAVE", "into B: the STARLIFT save is named: %r" % q)
 s.tap("DOWN"); s.tap("A"); s.frames(6)
 check(state()["B"][1] == "CHAA" and state()["A"][1] == "CHIX", "page B now CHAA, A untouched")
 s.tap("A")
@@ -899,7 +899,7 @@ start(card=cb, keep_bak=False)
 say("H 0 01 02 FF 43 41 42 44 00 11 22")
 check(state()["A"][0] == 2, "raw bytes that are not a code: UNKNOWN DATA (kind DAMAGED)")
 say("W 1 CABD 1 3 40")
-check(state()["B"][:4] == (3, "CABD", 3, True), "an Alien Breed (CABD) record reads as a valid save, not UNKNOWN DATA")
+check(state()["B"][:4] == (3, "CABD", 3, True), "a record of a game the table does not know (CABD) reads as a valid save, not UNKNOWN DATA")
 say("E 1")
 hx = st_line("STATE page=A").split("hex=")[1]
 check(hx == "01.02.FF.43.41.42.44.00.", "the page's first bytes are shown: " + hx)

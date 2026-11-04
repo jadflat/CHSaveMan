@@ -327,6 +327,7 @@ FRESULT f_write (FIL* fp, const void* buff, UINT btw, UINT* bw);	/* Write data t
 FRESULT f_lseek (FIL* fp, FSIZE_t ofs);								/* Move file pointer of the file object */
 FRESULT f_truncate (FIL* fp);										/* Truncate the file */
 FRESULT f_sync (FIL* fp);											/* Flush cached data of the writing file */
+FRESULT f_flushwin (FATFS* fs);										/* CHSaveMan: write fs->win if dirty */
 FRESULT f_opendir (DIR* dp, const TCHAR* path);						/* Open a directory */
 FRESULT f_closedir (DIR* dp);										/* Close an open directory */
 FRESULT f_readdir (DIR* dp, FILINFO* fno);							/* Read a directory item */

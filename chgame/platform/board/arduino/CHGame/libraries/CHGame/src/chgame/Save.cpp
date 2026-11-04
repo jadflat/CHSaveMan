@@ -1,3 +1,6 @@
+// MODIFIED for CHSaveMan (Apache-2.0 section 4(b)), against upstream bateske/CHGame e1f8d05: save::rawPage() and
+// save::rawWrite() (whole-page access for a save manager), the flash-ownership rule (status(), BLOCKED,
+// allowOverwrite()), save backends with slots (useBackend(), slots()). See chgame/PATCHES.md.
 // Saving: see Save.h. The record is
 //   u32 magic; u8 version, flag; u16 seq; data; (pad to 4) u32 crc
 // with the CRC (CRC-32, reflected) over everything before it.

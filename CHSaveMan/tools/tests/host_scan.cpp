@@ -2,7 +2,8 @@
 //   export PATH=<w64devkit>/bin:$PATH
 //   g++ -std=c++17 -O1 -Wall -o CHSaveMan/tools/tests/out/host_scan.exe CHSaveMan/tools/tests/host_scan.cpp
 //   CHSaveMan/tools/tests/out/host_scan.exe CHSaveMan/tools/tests/scan_truth.txt <root folder that holds Arduino/> [-v]
-// scan_truth.txt: "<code or -> <path under the root>" per line (# comments). A file passes when the scan
+// scan_truth.txt (a local list, not in the repository: write one for your own .CHG files):
+// "<code or -> <path under the root>" per line (# comments). A file passes when the scan
 // gives exactly that one code (or none for -); "top" counts files whose first code is right. Missing
 // files are skipped. Every file is also scanned with chunk edges at other places: same codes, same order.
 // Prints PASS or FAIL (FAIL only for chunk-edge differences and the synthetic tests: accuracy is reported).

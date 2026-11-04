@@ -1,9 +1,8 @@
 # CODE=NAME, hand-kept: wins over the scanned titles. Short forms (14 characters at most) for long titles.
-BECK=BECKON
-CHLS=CELESTE
+# Public games only (CHGame's own examples and the public jadflat repositories). Every other game's name is
+# learned on the user's card: FIND GAME NAMES appends it to SAVENAME.TXT.
+CHAR=CHARTH
+CHIX=CHIX
 CHSN=SNAKES&LADDERS
 CHTT=TIC TAC TOE
-CIVO=INVADER OVERLD
-FEAT=FEATHERED
-GOTD=OUT OF DUNGEON
-SHNB=SHINOBI
+SLFT=STARLIFT

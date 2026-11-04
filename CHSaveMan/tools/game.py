@@ -16,4 +16,5 @@ SIM_TESTS = [
     "tools/tests/extra_safety.py",
     "tools/tests/extra_features.py",
     "tools/tests/sim_round3.py",
+    "tools/tests/sim_v019.py",
 ]

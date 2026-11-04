@@ -11,41 +11,45 @@
    - UNSURE: the file has two or more equal-scoring codes; nothing is learned. Add the line to
      `SAVENAME.TXT` by hand.
 4. A game with no save code is counted but learns nothing. A non-ASCII title uses the file name.
-5. `SAVENAME.TXT` is only ever appended to; lines the app does not use are kept. Only the first 32 names
-   are used (NAME LIST FULL appears when more are found).
+5. `SAVENAME.TXT` is only ever appended to; lines the app does not use are kept, and every name in it is used.
+   A scan learns at most 32 new codes (NAME LIST FULL: scan again for the rest).
 
 ## Tests
 
-`./cl check` runs everything (ALL GOOD at 0.18): the host test, the scripts, the four simulator test files
+`./cl check` runs everything (ALL GOOD at 0.19): the host test, the scripts, the five simulator test files
 (`tools/game.py` lists them) and the device build. On their own:
 
-- `./cl test`: `tools/tests/host_fatfs.cpp`, 159 checks. The board's card code (`src/sd/sdio_dev.cpp`) and FatFs
+- `./cl test`: `tools/tests/host_fatfs.cpp`, 193 checks. The board's card code (`src/sd/sdio_dev.cpp`) and FatFs
   with the board's `ffconf.h`, on a RAM disk formatted FAT16 (2 KB and 32 KB clusters) and FAT32 (MBR, 512 B
   clusters): NO_CARD / IO / NOT_FAT mounts; SAVES.BAK / .BK1 / .UND, the SAVES folder, .SAV / .SV1 renames;
   the disk image after every sector write of a backup, an undo, a .SAV and a SAVENAME.TXT append (each reads as
   the old or the new file, the lone .TMP case included, and the next write recovers); a failing sector write at
   every point (IO, nothing lost); the GAMES scan (every code, codes on chunk edges, deep / junk / bad files, a
-  remount and a pulled card mid-scan); a frame-time model of the app's scan loop.
+  remount and a pulled card mid-scan); a frame-time model of the app's scan loop (0.19: `scanRoom`, no scanNext
+  call writes a sector, GAMELIST.TXT written line by line).
 - `python CHSaveMan/tools/tests/sim_save.py` (183), `extra_safety.py` (59), `extra_features.py` (23),
   `sim_round3.py` (126: every screen with NO CARD / CARD NOT FAT32 / CARD ERROR at boot and at run time, a
   failed SAVENAME.TXT append written once later, a multi-frame scan naming every game, power cuts in the undo
-  and .SAV writes, read-back failures, a full round trip byte for byte).
+  and .SAV writes, read-back failures, a full round trip byte for byte), `sim_v019.py` (an undo cut by a power cut
+  keeps SAVES.UND, NO CARD / CARD ERROR on the BAK line and its re-read, the RESTORE FROM row, GAMES LIST after a
+  multi-frame scan).
 - Simulator faults (`src/sd/sdio_sim.cpp`): `SAVM_NOCARD=1|fat|err`, `SAVM_FAIL=io|crc|scan|append|read|cut`,
   at run time `say Z <mode>` (also `nocard`, `nofat`, `cardfail`; `Z -` back to `$SAVM_FAIL`).
 
-The app has run on a real board only at v0.11 (see HANDOVER).
+The app ran on a real board at v0.11, v0.18 and v0.19.
 
-## Scan frame time (0.18)
+## Scan frame time (0.19, measured on the board)
 
-The frame is the panel flush (11.1 ms; SPI1 is shared, so card reads cannot overlap it), the drawing and the card
-time. 0.11 to 0.17 guessed the next scanNext call's time from the last call, so a slow call could start near the
-end of the budget (board 0.11: 40 ms frames with a 24 ms budget; one 4 KB call took up to 20.5 ms). 0.18 guesses
-the slowest recent call (decaying 1/16 a call), SCAN_BUDGET 12 ms, SCAN_STEP 2 KB, and a call stops after a folder
-opens, a bad .CHG header or 16 folder entries (at most 6 sectors a call in the host test). The host model, from the
-sectors each call reads and the board's ~0.8 ms a sector: worst frame 25.5 ms (4 KB step: 25.5; 0.17's guess with
-a 16 ms budget: 32-39 ms), 25.1 ms if the card is twice as slow, 30.7 ms if one call is suddenly twice as slow. A
-model, not a measurement: confirm on the board (a debug build does not fit with both save pages; build one with
-one save page to read `STATE scan ... framemaxus`).
+A frame is the card work, the drawing and the wait for the last panel flush (SPI1 is shared, so card reads cannot
+overlap it): about 7 ms without card work. 0.18 read 2 KB a scanNext call and guessed the next call's time: 1.6
+calls a frame, a 78-game scan in 36-37 s, worst frame 36-37 ms (one call 24.8 ms; a second run had one at 32.7 ms,
+a cluster boundary: FAT read and new CMD18, the card stalling). Board time per 512-byte sector: read 0.37 ms, the
+scanner 0.9 ms (0.19's prefilter in `chgscan.h` halves that: a lui is looked at only when its top two bytes can
+still be printable). 0.19: `sdio::scanRoom(us)` decides per sector whether more fits in SCAN_BUDGET (18 ms) of the
+frame; a file or folder step starts only with SCAN_OPEN_US (11 ms) left (else WAIT); a GAMELIST.TXT line is written
+by listAdd itself (FF_FS_TINY: `f_flushwin`), not by the next scan step; the start (names, SAVENAME.TXT codes,
+GAMES, GAMELIST.TXT) and the end (GAMELIST.TXT closed; the names searched, then appended) are one step a frame.
+Board, 78 games: scan 10.9 s at a 20 ms budget, 12.3 s with 32 new names; the numbers per frame are in CHANGELOG.md.
 
 ## v0.10 (2026-11-04)
 

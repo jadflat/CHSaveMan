@@ -17,10 +17,10 @@
 #include "sdio.h"
 #include "chgscan.h"
 #include <fonts/CHGfx_Tiny3x5.h>
-#include <fonts/CHGfx_SansBold12.h>
+#include "TitleFont.h"          // SansBold12 cut to 0x20..0x5A (tools/gen_titlefont.py)
 #include "Names.h"      // the save codes and their games (tools/gen_names.py)
 
-#define SAVM_VERSION "0.18"
+#define SAVM_VERSION "0.19"
 
 enum Col : uint8_t { C_BG, C_PANEL, C_EDGE, C_TEXT, C_DIM, C_HI, C_GOOD, C_BAD, C_WARN };
 
@@ -226,15 +226,19 @@ static void codeLine(char *l, uint8_t n) {             // a scan: every code in 
 static const char *sdText(sdio::Result r);
 static uint16_t namesOld = 0;
 
-// Append the fresh names to SAVENAME.TXT (never rewritten, so a big or foreign file is left alone). nullptr: saved.
-// A code already in the file is not appended again: the whole file is searched first. namesOld counts those (the
-// scan called them NEW; they are KNOWN).
-static const char *namesSave() {
-    uint32_t inF = 0;
-    sdio::Result fr = sdio::namesFind(learned[0].code, sizeof learned[0], (uint8_t)nLearned, fresh, &inF);
-    if (fr != sdio::OK && fr != sdio::NO_FILE) return sdText(fr);
-    for (int i = 0; i < nLearned; i++) if (inF & (1u << i)) namesOld++;
-    fresh &= ~inF;
+// Append the fresh names to SAVENAME.TXT (never rewritten, so a big or foreign file is left alone), in two frames
+// (0.19: one took 42 ms on the board with 32 names): part 1 searches the whole file, so a code already in it is
+// not appended again (namesOld counts those: the scan called them NEW, they are KNOWN); part 2 appends.
+// nullptr: done.
+static const char *namesSave(uint8_t part) {
+    if (part == 1) {
+        uint32_t inF = 0;
+        sdio::Result fr = sdio::namesFind(learned[0].code, sizeof learned[0], (uint8_t)nLearned, fresh, &inF);
+        if (fr != sdio::OK && fr != sdio::NO_FILE) return sdText(fr);
+        for (int i = 0; i < nLearned; i++) if (inF & (1u << i)) namesOld++;
+        fresh &= ~inF;
+        return nullptr;
+    }
     uint16_t len = 0;
     for (int i = 0; i < nLearned; i++) {
         if (!(fresh & (1u << i))) continue;
@@ -398,15 +402,17 @@ __attribute__((noinline)) static void message(const char *a, const char *b, uint
     msg1 = a; msg2 = b; msg3 = c; msgCol = col; screen = MSG;
 }
 
+// A failure shown to the user. NO CARD / NOT FAT32 / CARD ERROR also go to onCardR (0.19): the main screen's BAK
+// line says so instead of the old file's pages, and leaving the message reads SAVES.BAK again (cardAgain).
 __attribute__((noinline)) static const char *sdText(sdio::Result r) {
     switch (r) {
-        case sdio::NO_CARD: return "NO CARD";
-        case sdio::NOT_FAT: return "CARD NOT FAT32";
         case sdio::NO_FILE: return "NO SAVES.BAK";
         case sdio::BAD_FILE: return "BAD BACKUP FILE";
         case sdio::NO_GAMES: return "NO GAMES FOLDER";
-        default: return "CARD ERROR";
+        case sdio::NO_CARD: case sdio::NOT_FAT: case sdio::IO: onCardR = r; break;
+        default: break;
     }
+    return r == sdio::NO_CARD ? "NO CARD" : r == sdio::NOT_FAT ? "CARD NOT FAT32" : "CARD ERROR";
 }
 
 static bool nothing(int i) { return info[i].kind == Info::EMPTY || info[i].kind == Info::CODE; }
@@ -433,13 +439,14 @@ static const char *savPath(const char *code) {
 
 static const char *srcName() { return src == SRC_SAV ? savName : srcFile; }
 
-// The pages as they are now, to SAVES.UND (via buf's second half): what UNDO LAST CHANGE puts back.
-static sdio::Result writeUndo() {
+// The pages as they are now, to SAVES.UND (via buf's second half): what UNDO LAST CHANGE puts back. two: to
+// SAVES.UN2 instead (an undo from SAVES.UND keeps that file until its pages are in flash).
+static sdio::Result writeUndo(bool two = false) {
     for (int i = 0; i < 2; i++) {
         const uint8_t *p = pageAt(i);
         if (p) memcpy(buf + 512 + 256 * i, p, 256); else memset(buf + 512 + 256 * i, 0xFF, 256);
     }
-    return sdio::writeRec("SAVES.UND", "SAVES.UTM", buf + 512, 2, nullptr);
+    return sdio::writeRec(two ? "SAVES.UN2" : "SAVES.UND", two ? "SAVES.U2T" : "SAVES.UTM", buf + 512, 2, nullptr);
 }
 
 static void readCardBak() {
@@ -452,14 +459,15 @@ static void readCardBak() {
 static void doRestore() {
     // Skip pages that already match; write the page holding the older (or invalid, or empty) record first,
     // so a power cut leaves the newer record intact. A page that cannot be written is reported. SAVES.UND gets
-    // the pages as they are first (a restore from SAVES.UND swaps the two).
-    bool any = false;
+    // the pages as they are first. An undo (from SAVES.UND) puts them in SAVES.UN2 first and replaces SAVES.UND
+    // only once its pages are in flash: a power cut or a failed write leaves SAVES.UND as it was (0.19).
+    bool any = false, und = src == SRC_UND;
     for (int i = 0; i < 2; i++) {
         const uint8_t *cur = pageAt(i);
         any |= inSet(i) && cur && memcmp(cur, buf + 256 * i, 256);
     }
     if (any) {
-        sdio::Result u = writeUndo();
+        sdio::Result u = writeUndo(und);
         if (u != sdio::OK) { message("RESTORE FAILED", "SAVES.UND NOT WRITTEN", C_BAD, sdText(u)); return; }
     }
     auto stale = [](int i) { return info[i].kind != Info::RECORD || !info[i].valid || info[i].spare; };
@@ -491,8 +499,10 @@ static void doRestore() {
         why[nWhy] = w[nWhy]; nWhy++;
     }
     scan();
-    if (!nWhy) {
-        if (src == SRC_UND && which == 2) message("UNDONE: PAGES BACK", "FROM SAVES.UND", C_GOOD);
+    if (any && und && !nWhy && sdio::writeRec("SAVES.UND", "SAVES.UTM", buf + 512, 2, nullptr) != sdio::OK)
+        message("UNDONE: PAGES BACK", "SAVES.UND NOT UPDATED", C_WARN);   // the pages before: SAVES.UN2
+    else if (!nWhy) {
+        if (und && which == 2) message("UNDONE: PAGES BACK", "FROM SAVES.UND", C_GOOD);
         else message(which == 2 ? "RESTORED FROM" : which ? "RESTORED PAGE B FROM" : "RESTORED PAGE A FROM", srcName(), C_GOOD);
     } else message(wroteAny ? "RESTORE PARTLY DONE" : "RESTORE FAILED", why[0], C_BAD,
                    why[1] ? why[1] : (flashOff() ? "SAVING IS OFF" : ""));
@@ -874,8 +884,15 @@ static void doOp() {
 
 // ---- The name scan ----
 
+static sdio::Result scanR;              // what ended the last scan
+static uint8_t namesLater = 0;          // its new names: 2 search SAVENAME.TXT next frame, 1 then append
+static void scanMsg(const char *nameErr);
+static bool linePending = false;        // item's GAMELIST.TXT line is not written yet (no room left in its frame)
+static const char *lineCode;
+static void gameLine(const sdio::ScanItem &it, const char *code);
 static void scanFinish(sdio::Result r) {
     sdio::scanEnd(scn);
+    if (linePending && listOk) gameLine(item, lineCode);    // B stopped the scan before the last game's line
     if (listOk && scn.skipDirs) {
         char l[48];
         int k = snprintf(l, sizeof l, "# SKIPPED %u FILES IN %u DEEP FOLDERS\n", scn.skipFiles, scn.skipDirs);
@@ -892,17 +909,31 @@ static void scanFinish(sdio::Result r) {
 #if CHGAME_DEBUG
     scanMs = millis() - scanT0;
 #endif
-    const char *nameErr = namesDirty ? namesSave() : nullptr;       // whatever stopped the scan
-    scanNew -= namesOld; scanKnown += namesOld; namesOld = 0;
-    bool failed = r != sdio::DONE;
+    scanR = r;
+    namesLater = namesDirty ? 2 : 0;    // the new names are written in the next frames, after this message is out
+    scanMsg(nullptr);
+}
+
+// The scan's message; nameErr: writing its new names failed (scanFinish's frame: they are not written yet).
+static void scanMsg(const char *nameErr) {
+    bool failed = scanR != sdio::DONE;
     snprintf(m2, sizeof m2, "%u GAMES  %u NEW", scanFiles, scanNew);
     if (scn.skipFiles) snprintf(m3, sizeof m3, "%u KNOWN %u UNSURE %u SKIPPED", scanKnown, scanUnsure, scn.skipFiles);
     else snprintf(m3, sizeof m3, "%u KNOWN  %u UNSURE", scanKnown, scanUnsure);
-    if (nameErr) message("NAMES NOT SAVED", nameErr, C_BAD, failed ? sdText(r) : m2);
-    else if (failed) message("SCAN FAILED", sdText(r), C_BAD, scanNew ? "NEW NAMES SAVED" : "");
+    if (nameErr) message("NAMES NOT SAVED", nameErr, C_BAD, failed ? sdText(scanR) : m2);
+    else if (failed) message("SCAN FAILED", sdText(scanR), C_BAD, scanNew && !namesDirty ? "NEW NAMES SAVED" : "");
     else if (namesFull) message("NAME LIST FULL", m2, C_WARN, "SCAN AGAIN FOR MORE");
     else message(scanStop ? "SCAN STOPPED" : "SCAN DONE", m2, scanNew ? C_GOOD : C_WARN, m3);
     namesStale = true;
+}
+
+// The frame after the scan's message: its new names to SAVENAME.TXT (codes the file already had are KNOWN).
+static void namesLate() {
+    const char *e = namesSave(namesLater--);
+    if (!e && namesLater) return;
+    namesLater = 0;
+    scanNew -= namesOld; scanKnown += namesOld; namesOld = 0;
+    if (screen == MSG) scanMsg(e);
 }
 
 // *code: the game's save code when the answer is clear (else left alone).
@@ -963,65 +994,87 @@ static void gameLine(const sdio::ScanItem &it, const char *code) {
     if (sdio::listAdd(l, (uint16_t)k) != sdio::OK) listOk = false;
 }
 
-// Card reads a frame (called between gfx_wait and the flush) while the next call would still end within
-// SCAN_BUDGET us, so the picture and B stay alive at 30 fps. One scanNext reads at most SCAN_STEP bytes. The guess
-// for the next call is the slowest recent one (it decays by 1/16 a call): guessing with the last call (0.11 to
-// 0.17) let a slow call start late (board: 40 ms frames with a 24 ms budget, one call up to 20 ms). The panel
-// flush (11 ms, SPI1 is shared) and the drawing come on top. The simulator: one call a frame (repeatable tests).
+// Card work a frame (called between gfx_wait and the flush), so the picture and B stay alive at 30 fps. First one
+// step a frame (each a mount or a file open, 5-10 ms on the board; 0.18 did them in one 39 ms frame): names left
+// from the last scan, SAVENAME.TXT's codes, the GAMES folder, GAMELIST.TXT. Then the games: scanNext calls while
+// scanRoom says the work fits in SCAN_BUDGET us of this frame; a call reads sectors until the next would not fit
+// (0.18 read 2 KB a call and guessed the next call's time: 1.6 calls a frame, 37 s for 78 games; one call ran
+// 24.8 ms, a card read that stalled). A game's GAMELIST.TXT line waits for the next frame without LINE_US left.
+// The panel flush and the drawing (~7 ms) come on top. The simulator: one call a frame (repeatable tests).
 // tools/tests/host_fatfs.cpp models this loop.
-static const uint32_t SCAN_BUDGET = 12000;
-static uint32_t scanGuess;
+static const uint32_t SCAN_BUDGET = 18000, LINE_US = 8000;     // board 0.19 at 20 ms: worst frame 32.4 ms
+enum : uint8_t { P_FIND, P_NAMES, P_FEED, P_BEGIN, P_LIST, P_RUN };
+static bool findOk;
+static uint8_t scanPhase;
+static uint32_t scanT;                  // micros() at this frame's first card call
+static bool room(uint16_t us) {
+#ifdef CHSIM
+    (void)us;
+    return true;
+#else
+    return micros() - scanT + us <= SCAN_BUDGET;
+#endif
+}
 static void scanStep() {
     if (scanStop) { scanFinish(sdio::DONE); return; }
-    uint32_t t0 = micros();
+    scanT = micros();
+    if (scanPhase != P_RUN) {
+        sdio::Result r = sdio::OK;
+        if (scanPhase == P_FIND) findOk = !namesDirty || !namesSave(1);   // names still waiting from the last scan
+        else if (scanPhase == P_NAMES) {    // go first, searched then appended (and stay if that fails)
+            if (namesDirty && findOk) namesSave(2);
+            if (!namesDirty) { nLearned = 0; fresh = 0; }
+            namesOld = 0;
+        } else if (scanPhase == P_FEED) feedNames(codeLine);       // SAVENAME.TXT's codes to buf: KNOWN, not NEW
+        else if (scanPhase == P_BEGIN) r = sdio::scanBegin(scn);
+        else listOk = sdio::listBegin("GAMELIST.TXT") == sdio::OK;
+        scanPhase++;
+        if (r == sdio::NO_GAMES) message("SCAN DONE", "NO GAMES FOLDER", C_WARN);
+        else if (r != sdio::OK) message("SCAN FAILED", sdText(r), C_BAD);
+        if (screen != SCANNING) nFileCodes = 0;
+        return;
+    }
+    if (linePending) { linePending = false; if (listOk) gameLine(item, lineCode); }
+#ifndef CHSIM
+    sdio::scanRoom = room;
+#endif
     for (;;) {
-        uint32_t t1 = micros();
         sdio::Result r = sdio::scanNext(scn, item);
-        uint32_t d = micros() - t1;
-        scanGuess = d > scanGuess ? d : scanGuess - (scanGuess >> 4);
 #if CHGAME_DEBUG
         scanCalls++;
-        if (micros() - t0 > scanMaxUs) scanMaxUs = micros() - t0;      // the frame's card time so far
+        if (micros() - scanT > scanMaxUs) scanMaxUs = micros() - scanT;    // the frame's card time so far
 #endif
         scanFiles = scn.fileIndex;
         if (r == sdio::OK) {
-            const char *code = nullptr;
-            const char *what = consider(item, &code);
-            if (listOk) gameLine(item, code);
+            lineCode = nullptr;
+            const char *what = consider(item, &lineCode);
 #if CHGAME_DEBUG
             if (scanTrace) traceItem(item, what);
 #endif
             (void)what;
-        } else if (r != sdio::BUSY) { scanFinish(r); return; }
+            if (!room(LINE_US)) { linePending = true; return; }
+            if (listOk) gameLine(item, lineCode);
+        } else if (r == sdio::WAIT) return;
+        else if (r != sdio::BUSY) { scanFinish(r); return; }
 #ifdef CHSIM
-        (void)t0;
         return;
-#else
-        if (micros() - t0 + scanGuess > SCAN_BUDGET) return;
 #endif
+        if (!room(sdio::SCAN_SEC_US)) return;
     }
 }
 
 static void startScan() {
-    // Names from the last scan still waiting to be written are written first (and kept if that fails). Then
-    // SAVENAME.TXT's codes go to buf for the scan (KNOWN, not NEW).
-    if (namesDirty) namesSave();
-    if (!namesDirty) { nLearned = 0; fresh = 0; }
-    namesOld = 0;
     namesFull = false;
     nFileCodes = 0;
-    feedNames(codeLine);
     scanFiles = scanNew = scanKnown = scanUnsure = 0;
     scanStop = false;
-    scanGuess = 0;
+    linePending = false;
+    scanPhase = P_FIND;
+    screen = SCANNING;
 #if CHGAME_DEBUG
     scanT0 = millis(); scanMs = 0; scanCalls = 0; scanMaxUs = 0;
 #endif
-    sdio::Result r = sdio::scanBegin(scn);
-    if (r == sdio::NO_GAMES) message("SCAN DONE", "NO GAMES FOLDER", C_WARN);
-    else if (r != sdio::OK) message("SCAN FAILED", sdText(r), C_BAD);
-    else { screen = SCANNING; listOk = sdio::listBegin("GAMELIST.TXT") == sdio::OK; }
-    if (screen != SCANNING) nFileCodes = 0;
+    scanStep();
 }
 
 // The GAMES LIST details: what can be done with the row.
@@ -1170,7 +1223,7 @@ __attribute__((noinline)) static void box(int x, int y, int w, int h, uint8_t ed
     gfx_fillRect(x + 1, y + 1, w - 2, h - 2, C_PANEL);
 }
 
-// Text: Tiny3x5 (y = top of the glyphs); the title alone is SansBold12 (y = baseline).
+// Text: Tiny3x5 (y = top of the glyphs); the title alone is TitleFont, SansBold12 (y = baseline).
 __attribute__((noinline)) static void T(int x, int y, const char *s, uint8_t c) {
     gfx_setFont(&CHGfx_Tiny3x5);
     gfx_text(x, y + gfx_fontBaseline(), s, c);
@@ -1184,7 +1237,8 @@ __attribute__((noinline)) static void right(int y, const char *s, uint8_t c) {
     T(128 - 6 - gfx_textWidth(s), y, s, c);
 }
 __attribute__((noinline)) static void titleText(int base, const char *s, uint8_t c) {
-    gfx_setFont(&CHGfx_SansBold12);
+    for (const char *p = s; *p; p++) if (*p > 0x5A) { centre(base - 6, s, c); return; }   // not in TitleFont
+    gfx_setFont(&TitleFont);
     gfx_text((128 - gfx_textWidth(s)) / 2, base, s, c);
 }
 
@@ -1211,10 +1265,9 @@ static uint8_t pageText(int i, char *s, int ns, char *t, int nt, uint8_t *tc) {
     uint8_t c = C_TEXT;
     t[0] = 0;
     *tc = C_DIM;
-    if (in.kind == Info::OFF) { snprintf(s, ns, "%c  SAVING IS OFF", 'A' + i); c = C_BAD; }
-    else if (in.kind == Info::CODE) { snprintf(s, ns, "%c  GAME CODE", 'A' + i); c = C_DIM; }
-    else if (in.kind == Info::EMPTY) { snprintf(s, ns, "%c  EMPTY", 'A' + i); c = C_DIM; }
-    else if (in.kind == Info::DAMAGED) { snprintf(s, ns, "%c  UNKNOWN DATA", 'A' + i); c = C_WARN; }
+    const char *w = in.kind == Info::OFF ? "SAVING IS OFF" : in.kind == Info::CODE ? "GAME CODE" :
+                    in.kind == Info::EMPTY ? "EMPTY" : in.kind == Info::DAMAGED ? "UNKNOWN DATA" : nullptr;
+    if (w) { snprintf(s, ns, "%c  %s", 'A' + i, w); c = in.kind == Info::OFF ? C_BAD : in.kind == Info::DAMAGED ? C_WARN : C_DIM; }
     else if (otherFormat(in)) { snprintf(s, ns, "%c  OTHER %s", 'A' + i, in.magic); c = C_WARN; }
     else {
         snprintf(s, ns, "%c  %s", 'A' + i, cutN(gameName(in.magic), 12));
@@ -1372,6 +1425,21 @@ static const char *askLines(char *l1, char *l2, char *l3, int n) {
     return lostLine(l3, 28);
 }
 
+// A RESTORE FROM row's second line (27 characters at most): a .SAV's game, counter and version; a two-page file's
+// pages at 13 characters each ("A " name counter, a space), the name cut so the counter stays (0.18 cut B's).
+static void srcLine(char *l, const SrcRow &w) {
+    int k = 0;
+    for (uint8_t p = 0; p < w.n; p++) {
+        char sq[8] = "";
+        const char *g = w.kind[p] == Info::EMPTY ? "-" : w.kind[p] == Info::RECORD ? gameName(w.m[p]) : "?";
+        if (w.kind[p] == Info::RECORD) snprintf(sq, sizeof sq, " #%u", w.seq[p]);
+        const char *nm = cutN(g, w.n == 1 ? 8 : 11 - (int)strlen(sq));
+        if (w.n == 1) k = snprintf(l, 40, "%s%s V%u%s", nm, sq, w.ver[p], w.valid[p] ? "" : " BAD");
+        else k += snprintf(l + k, 40 - k, "%c %s%s ", 'A' + p, nm, sq);
+    }
+    l[k] = 0;
+}
+
 static void draw() {
     gfx_clear(C_BG);
     char a[28], b[36];
@@ -1527,17 +1595,9 @@ static void draw() {
                                  w.r == sdio::BAD_FILE ? "BAD FILE" : "CARD ERROR";
                 right(y, st, w.r == sdio::OK ? C_DIM : C_WARN);
                 if (w.r != sdio::OK) continue;
-                char l[40] = "";
-                int k = 0;
-                for (uint8_t p = 0; p < w.n; p++) {
-                    char nm[9], sq[8] = "";
-                    const char *g = w.kind[p] == Info::EMPTY ? "-" : w.kind[p] == Info::RECORD ? gameName(w.m[p]) : "?";
-                    snprintf(nm, sizeof nm, "%s", cutN(g, 8));
-                    if (w.kind[p] == Info::RECORD) snprintf(sq, sizeof sq, " #%u", w.seq[p]);
-                    if (w.n == 1) snprintf(l, sizeof l, "%s%s V%u%s", nm, sq, w.ver[p], w.valid[p] ? "" : " BAD");
-                    else k += snprintf(l + k, sizeof l - k, "%c %s%s  ", 'A' + p, nm, sq);
-                }
-                T(14, y + 7, cutN(l, 27), C_TEXT);
+                char l[40];
+                srcLine(l, w);
+                T(14, y + 7, l, C_TEXT);
             }
             T(6, 121, "A: PICK  B: BACK", C_DIM);
             break;
@@ -1660,6 +1720,12 @@ static void state() {
             k += snprintf(l + k, sizeof l - k, "%s%s:%u", i ? "," : "", srcRow[i].file, srcRow[i].r);
         snprintf(l + k, sizeof l - k, "\n");
         dbg::print(l);
+        if (srcN && srcRow[srcCur].r == sdio::OK) {     // the cursor row's second line, as drawn
+            char r[40];
+            srcLine(r, srcRow[srcCur]);
+            snprintf(l, sizeof l, "STATE srcline=%s|\n", r);
+            dbg::print(l);
+        }
     }
     if (screen == CONFIRM && pending == OP_RESTORE) {       // the restore question's lines
         char l1[36], l2[36], l3[28];
@@ -1823,6 +1889,7 @@ void loop() {
     } else if (screen == SCANNING) scanStep();
     else if (screen == LIST && listLoad) listStep();
     else if (screen == SRCLIST && srcLoad) srcStep();
+    else if (namesLater) namesLate();
     if (cardAgain && screen == MAIN) { cardAgain = false; readCardBak(); }
     if (namesStale && screen != SCANNING) { namesStale = false; namesRefresh(); }
     draw();

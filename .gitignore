@@ -5,3 +5,4 @@ __pycache__/
 savm_card/
 savm_sim.bak
 dist/*.img
+CHSaveMan/tools/tests/scan_truth.txt

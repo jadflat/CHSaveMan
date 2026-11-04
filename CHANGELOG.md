@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.19 (2026-11-04, measured on the board)
+- The scan, measured on the board (78 games, a debug build with GAMES LIST kept and other screens left out to fit):
+  12.3 s (0.18: 36-37 s), worst frame 31.1 ms (0.18: 36-37 ms during the scan, 39.3 ms at its start, 47.1 ms at
+  its end with a new name). Per step, worst frame: start 15.0, SAVENAME.TXT's codes 27.0, the GAMES folder 21.7,
+  GAMELIST.TXT 24.4, the games and the end 30.4, the names search after SCAN DONE 31.1 ms. The 0.18 slow call
+  (24.8 ms, once 32.7 ms) was a cluster boundary (FAT read, new CMD18) where the card stalled; per 512-byte sector
+  the card read took 0.37 ms and the scanner 0.9 ms.
+- How: `sdio::scanRoom(us)`: a scanNext call reads sectors while they fit SCAN_BUDGET (18 ms) of the frame and
+  returns right after the step that used it up; a file or folder step starts only with 11 ms left (else WAIT).
+  The scanner skips a lui whose top two bytes cannot make a printable code (same results on 187 real .CHG files,
+  2.4x faster on the PC). A GAMELIST.TXT line is written by listAdd (`f_flushwin`) instead of by the next scan
+  step; a line that does not fit its frame waits for the next. The start (names left from the last scan, then
+  SAVENAME.TXT's codes, the GAMES folder, GAMELIST.TXT) is one step a frame; the new names are searched and then
+  appended in the two frames after SCAN DONE is on screen (with 32 names that was one 42 ms frame).
+- An undo from SAVES.UND writes the pages it replaces to `SAVES.UN2` and replaces SAVES.UND only after its pages
+  are in flash: a power cut or a failed page write during an undo no longer loses the pages being put back.
+- A back up or restore that fails with NO CARD / CARD NOT FAT32 / CARD ERROR shows it on the main screen's BAK line
+  at once, and leaving the message reads SAVES.BAK again (it showed the old file's pages).
+- RESTORE FROM: a two-page file's line keeps page B's counter (names cut to fit 13 characters a page).
+- Names.h holds public games only (CHGame's examples, CHix, StarLift, CHarth); every other game is learned into
+  SAVENAME.TXT by a scan. `tools/gen_names.py <CHGame checkout>` reads only CHGame's examples.
+- Title font: CHGfx's SansBold12 cut to 0x20..0x5A (`TitleFont.h`, `tools/gen_titlefont.py`; a code with other
+  characters is drawn in the small font): -0.5 KB of flash.
+- The vendored `Save.h`/`Save.cpp` carry a "modified" notice; `chgame/PATCHES.md` lists the changes.
+- New: `tools/tests/sim_v019.py` (undo power cut, BAK line after card errors, RESTORE FROM line, GAMES LIST after a
+  multi-frame scan), host_fatfs's frame model of the new loop (193 checks). New menu picture and README art
+  (`docs/`, `tools/make_media.py`); README pictures from a public sim card (`tools/make_pubcard.py`).
+- Image 49,952 B (480 B free), RAM 16,908 B; `./cl check` ALL GOOD.
+
 ## 0.18 (2026-11-04, simulator and host tests only)
 - Scan frame time: the frame's card budget guessed the next call's time from the last call, so a slow call could
   start late (board 0.11: 40 ms frames with a 24 ms budget; the host model puts 0.17's loop at 32-39 ms). Now the

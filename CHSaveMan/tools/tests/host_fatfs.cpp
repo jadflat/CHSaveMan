@@ -8,7 +8,7 @@
 //   - SAVENAME.TXT append and search, IGNORE.TXT replace, GAMELIST.TXT write and read
 //   - the GAMES scan: every game's code and path, two sub-folder levels, deep / junk / not-CHG1 files,
 //     codes on 512-byte and SCAN_STEP edges, a remount ending a scan; sectors read per scanNext call
-//   - a frame-time model of the app's scanStep (CHSaveMan.ino) from the sectors each call reads
+//   - a frame-time model of the app's scanStep (CHSaveMan.ino, sdio::scanRoom) with GAMELIST.TXT written as it goes
 // Prints "ok"/"FAIL" lines and "ALL OK" (exit 0) or "n FAILED" (exit 1).
 #include <stdint.h>
 #include <stdio.h>
@@ -429,7 +429,7 @@ static const Want GAMES[] = {
     { "OTHER/CARDS/DEEP2.CHG", "DEP2", "Deep Two", 2048, 2000 },
 };
 
-static std::vector<uint32_t> callSec;     // sectors each scanNext call read (the frame model's input)
+static std::vector<uint32_t> callSec;     // sectors each scanNext call read
 
 static void testScan(void (*format)(), const char *label) {
     format();
@@ -502,48 +502,78 @@ static void testScan(void (*format)(), const char *label) {
     callSec = keep;
 }
 
-// ---- the frame-time model of CHSaveMan.ino's scanStep ----
-// The board measured (v0.11, SCAN_STEP 4096, 74 games on a real card): 878 calls, about 6.8 ms a call on average
-// with no frame limit (6 s), at most 20.5 ms one call (34.6 ms once, the first read of a card). So a sector
-// costs about 0.8 ms (with CMD18 streaming and the scanner's work). On top of the card time a frame has the
-// panel flush (11.1 ms; SPI1 is shared with the card, so they do not overlap) and the scanning screen (~2 ms).
-// The model runs the app's loop over the calls this test's scan made (sectors each), three ways: every sector
-// at 0.8 ms; a card twice as slow throughout; and 0.8 ms with the frame's last call suddenly twice as slow.
-static const uint32_t T_CALL = 400, T_SEC = 800, T_REST = 13100, FRAME = 33333;
-static const uint32_t SCAN_BUDGET = 12000;            // as CHSaveMan.ino
-struct Model { uint32_t worst, frames; };
-static Model model(bool slowGuess, uint32_t budget, uint32_t tsec, bool spike) {
-    Model m = { 0, 0 };
-    uint32_t guess = 0;
-    for (size_t i = 0; i < callSec.size(); ) {
-        uint32_t e = 0;
-        for (;;) {
-            uint32_t sec = callSec[i++];
-            uint32_t d = T_CALL + tsec * sec;
-            if (spike && e + d + d > m.worst) m.worst = e + d + d;          // had this call been twice as slow
-            e += d;
-            if (slowGuess) guess = d > guess ? d : guess - (guess >> 4);   // the slowest recent call, decaying (0.18)
-            else guess = d;                                               // the last call (0.11 to 0.17)
-            if (e > m.worst) m.worst = e;
-            if (i >= callSec.size() || e + guess > budget) break;
-        }
-        m.frames++;
-    }
-    return m;
-}
+// ---- the frame-time model of CHSaveMan.ino's scanStep (0.19: sdio::scanRoom) ----
+// The board measured (0.18, 78 games on a real card): a sector read 0.37 ms, the scanner 0.9 ms a sector (0.19's
+// prefilter: about half), a .CHG open with its header up to 9.6 ms, a GAMELIST.TXT line up to 5 ms. The model
+// runs the app's loop on a clock made of the calls, sectors read and sectors written so far: scanRoom says whether
+// `us` more fits in the frame's SCAN_BUDGET. Checked: every frame stays within the budget, the scan still names
+// every game, WAIT ends frames, no scanNext call writes (listAdd writes its own line), GAMELIST.TXT reads back.
+static const uint64_t T_CALL = 400, T_SEC = 800, T_WR = 2000;
+static const uint32_t SCAN_BUDGET = 18000, LINE_US = 8000;   // as CHSaveMan.ino
+static uint64_t simCalls = 0, frameT = 0;
+static uint64_t simNow() { return simCalls * T_CALL + rdSec * T_SEC + (uint64_t)nWrites * T_WR; }
+static bool fakeRoom(uint16_t us) { return simNow() - frameT + us <= SCAN_BUDGET; }
 
-static void testModel(bool assert) {
-    const char *how[3] = { "0.8 ms/sector", "1.6 ms/sector", "0.8 ms/sector, a slow last call" };
-    for (int k = 0; k < 3; k++) {
-        uint32_t ts = k == 1 ? 2 * T_SEC : T_SEC;
-        Model now = model(true, SCAN_BUDGET, ts, k == 2), old = model(false, 16000, ts, k == 2);
-        printf("ok   frame model, %s: 0.18 (step %u, budget %u us, slowest-call guess) worst frame %.1f ms, %u frames; "
-               "with 0.17's guess (the last call, budget 16 ms) %.1f ms\n", how[k], sdio::SCAN_STEP, SCAN_BUDGET,
-               (now.worst + T_REST) / 1000.0, now.frames, (old.worst + T_REST) / 1000.0);
-#if SAVM_SCAN_STEP == 2048
-        if (assert && k < 2) check(now.worst + T_REST < FRAME, "the modelled worst scan frame stays under 33.3 ms", how[k]);
-#endif
+static void testRoom(const char *label) {
+    sdio::Scan s;
+    sdio::ScanItem it;
+    check(sdio::scanBegin(s) == sdio::OK && sdio::listBegin("GAMELIST.TXT") == sdio::OK, "scanBegin and listBegin", label);
+    sdio::scanRoom = fakeRoom;
+    std::vector<std::string> got;
+    uint32_t frames = 0, waits = 0, lines = 0;
+    uint64_t worst = 0;
+    bool wrote = false, ok = true;
+    sdio::Result r = sdio::BUSY;
+    for (bool more = true; more && frames < 100000; frames++) {
+        frameT = simNow();
+        for (;;) {
+            long w0 = nWrites;
+            simCalls++;
+            r = sdio::scanNext(s, it);
+            wrote |= nWrites != w0;
+            if (r == sdio::OK) {
+                if (!fakeRoom(LINE_US)) { simCalls++; frameT = simNow(); frames++; }    // the line goes to the next frame
+                char c[8] = "-";
+                if (it.nCodes) { memcpy(c, it.codes[0], 4); c[4] = 0; }
+                std::string l = std::string(it.path) + " " + c + " " + it.title;
+                got.push_back(l);
+                l += "\n";
+                long n0 = nWrites;
+                ok &= sdio::listAdd(l.c_str(), (uint16_t)l.size()) == sdio::OK && nWrites > n0;
+                lines++;
+            } else if (r == sdio::WAIT) { waits++; break; }
+            else if (r != sdio::BUSY) { more = false; break; }
+            if (!fakeRoom(sdio::SCAN_SEC_US)) break;
+        }
+        uint64_t d = simNow() - frameT;
+        worst = d > worst ? d : worst;
     }
+    sdio::scanRoom = nullptr;
+    sdio::scanEnd(s);
+    sdio::listEnd();
+    check(r == sdio::DONE, "scanRoom: the scan ends DONE", label);
+    check(got.size() == sizeof GAMES / sizeof GAMES[0], "scanRoom: every game read", std::to_string(got.size()));
+    for (const Want &w : GAMES) {
+        std::string up = w.path;
+        for (char &ch : up) if (ch >= 'a' && ch <= 'z') ch -= 32;
+        bool found = false;
+        for (auto &g : got) found |= g == up + " " + w.code + " " + w.title;
+        check(found, "scanRoom: the scan names every game", up);
+    }
+    // 512-byte clusters (no card comes so): a file open walks a FAT sector per folder sector, past SCAN_OPEN_US.
+    check(worst <= SCAN_BUDGET + (strstr(label, "512") ? 1000 : 0), "scanRoom: every modelled frame within SCAN_BUDGET",
+          std::to_string(worst));
+    check(waits > 0, "scanRoom: WAIT ends a frame before a step that would not fit", label);
+    check(!wrote, "no scanNext call writes a sector (listAdd wrote each line)", label);
+    check(ok, "listAdd writes its line at once", label);
+    static std::string fed;
+    fed.clear();
+    check(sdio::fileFeed("GAMELIST.TXT", [](char c) { fed += c; }) == sdio::OK, "GAMELIST.TXT reads back", label);
+    uint32_t nl = 0;
+    for (char c : fed) nl += c == 10;
+    check(nl == lines, "GAMELIST.TXT has every line", std::to_string(nl));
+    printf("ok   frame model (%s, 0.19): budget %u us, worst frame %.1f ms of card time, %u frames, %u WAIT\n", label,
+           SCAN_BUDGET, worst / 1000.0, frames, waits);
 }
 
 int main() {
@@ -562,10 +592,10 @@ int main() {
     }
     printf("-- the GAMES scan (FAT32, 512-byte clusters: every folder sector needs a FAT read)\n");
     testScan(formatFat32, "FAT32 512 B clusters");
-    testModel(false);
+    testRoom("FAT32 512 B clusters");
     printf("-- the GAMES scan (FAT16, 32 KB clusters, as a card formatter makes them)\n");
     testScan(formatFat16Big, "FAT16 32 KB clusters");
-    testModel(true);
+    testRoom("FAT16 32 KB clusters");
     printf("%d checks: %s\n", oks + fails, fails ? "FAILED" : "ALL OK");
     if (fails) printf("%d FAILED\n", fails);
     return fails ? 1 : 0;
