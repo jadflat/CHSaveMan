@@ -2,152 +2,84 @@
 
 ![SaveMan](docs/banner.png)
 
-Every CHGame game keeps its save in two shared flash pages (0xF500 and 0xF600). This app shows what is in
-them, which game each save belongs to, and lets you back them up to the SD card, restore them, or erase a page.
+Every CHGame game keeps its save in two shared flash pages (0xF500 and 0xF600). CHSaveMan shows what is in them
+and which game owns each save. It backs them up to the SD card, restores them and erases a page.
 
 ![GAMES LIST](docs/screenshot.png) ![The lander lifting a save](docs/lift.gif)
 
-## Features at a glance
+## Install
 
-- See both shared flash save pages: which game owns each save, how old it is, and whether SAVES.BAK holds it
-- Back up both pages, one page or one game's save to the SD card; backups go to a temp file, are read back, then renamed
-- Restore from any backup with a clear question first: what each page holds now, what it would hold, LOSES warnings
-- Undo the last restore or erase (`SAVES.UND`), and undo the undo
-- Erase a page, with a warning when it is the only copy of a game's save
-- FIND GAME NAMES scans the card and learns the title of every `.CHG`, so saves show real names
-- GAMES LIST: browse every game on the card in ALL / MISSING ONLY / SAVES ONLY / IGNORED ONLY views
-- Hide games you don't care about (one by one, or HIDE ALL without saves) and bring them back with SHOW ALL
-- Export `GAMELIST.CSV` with the game, folder, save code and why a save is missing
-- Game details: path, title, scan result, flash page, backup status; restore or back up just that game's save
-- Every flash write is read back; a failed write is reported, never ignored
-- Runs at 30 fps on the board; a 78-game card scans in about 12 s
+1. Copy `SAVEMAN.CHG` (from the release, or `dist/`) to the `GAMES` folder of the SD card (FAT16 or FAT32).
+2. Pick SAVE MANAGER in the menu. Hold START for 3 s to leave.
 
-## Screenshots
+**Back up first.** SaveMan writes the flash pages every game shares. Each restore and erase first saves the
+current pages to `SAVES.UND` (UNDO LAST CHANGE puts them back), and every page write is read back. No warranty
+(GPL-3.0, sections 15-16).
+
+## Features
+
+- **Main screen:** both pages with the game, the save's age (`#counter`) and BAK (backed up) or NEW (not yet).
+  If a page holds a newer save than the backup, it offers BACK UP NOW?
+- **Back up** to `SAVES.BAK` (the old one is kept as `SAVES.BK1`), for both pages, one page, or one game's save
+  (`SAVES/<CODE>.SAV`).
+- **Restore** from any backup file. It shows what each page holds now and what it would hold, with LOSES warnings.
+- **Undo** the last restore or erase, and undo the undo.
+- **Erase a page**, with a warning when it holds the only copy of a game's save.
+- **FIND GAME NAMES** scans the card's `.CHG` files (`GAMES` and two levels below) so saves show real titles.
+  78 games take about 12 s.
+- **GAMES LIST:** every game in ALL / MISSING ONLY / SAVES ONLY / IGNORED ONLY views. Hide games you don't care
+  about (one at a time, or HIDE ALL without a save), show them again, or write `GAMELIST.CSV`.
+- **Game details:** path, title, scan result, flash page, backup status; back up or restore just that save.
+- A game over 50,432 bytes reaches into page A; SaveMan shows UNKNOWN DATA there. It is harmless, and backup and
+  restore copy it as is.
+- If a flash write fails, the library turns saving off until restart (SAVING IS OFF).
 
 | | | |
 |---|---|---|
 | ![Main](docs/shots/01_main.png) | ![Page menu](docs/shots/02_page_menu.png) | ![Back up](docs/shots/03_backup_chooser.png) |
-| The two save pages | Page menu | Back up which pages |
-| ![Scan](docs/shots/05_scan_done.png) | ![List](docs/shots/06_games_list.png) | ![Missing](docs/shots/07_missing.png) |
-| Scan done | Games list | Missing only |
-| ![Details](docs/shots/09_details.png) | | |
-| Game details | | |
-
-## Install
-
-1. Copy `dist/SAVEMAN.CHG` (or the release's `SAVEMAN.CHG`) to the `GAMES` folder of the CHGame's SD card
-   (FAT16 or FAT32).
-2. On the board, pick SAVE MANAGER from the menu. Hold START for 3 s to go back to the menu.
-
-**Safety, no warranty.** SaveMan writes the flash save pages every CHGame game shares. Back up first (BACK UP
-PAGES...). Every restore and erase first writes the pages as they were to `SAVES.UND` (UNDO LAST CHANGE puts them
-back) and every page write is read back, but the software comes with no warranty (GPL-3.0, sections 15-16).
-
-**Status:** v0.20, board-tested (v0.19 facts below). On the board (78 games) HIDE ALL hid the 9 MISSING games, they stayed hidden after a rescan and SHOW ALL
-brought them back; its worst frames: a pass 32.3 ms, an append 31.2, the close 20.1, SHOW ALL 31.1 (30 fps: 33.3). v0.18 ran on a real board with a real card: a real game's save round trip
-(back up, erase, restore, the game loads it), a save and a power cycle, the NO CARD and CARD ERROR screens (the
-driver's test switch, card in the slot) and a new game's SAVENAME.TXT append. v0.19 was measured on the board
-with 78 games on the card: the scan takes 12.3 s (0.18: 36-37 s) and its worst frame is 31.1 ms (0.18: 47 ms;
-30 fps needs 33.3 ms); GAMES LIST shows the games right after the scan. Still needs a card physically out of the
-slot: NO CARD with an empty slot (the 250 ms CMD0 timeout); a non-FAT card (exFAT / NTFS) showing CARD NOT FAT32.
-Image 50,428 B of 50,432, RAM about 16.9 KB.
-
-## What it does
-
-- **Main screen:** the two flash pages with the game, `#<counter>` (the save's age), and BAK (green: SAVES.BAK holds
-  this record) or NEW (orange: not backed up yet); OLD for the spare copy, BAD for a bad CRC. A line shows what
-  SAVES.BAK holds ("BAK  <A> + <B>"). At start, if a page holds a newest save the backup lacks, BACK UP NOW? is offered.
-- **Back up** to `SAVES.BAK` (temp file, read back, renamed). A replaced backup is kept as `SAVES.BK1`. Page menus
-  also have BACK UP THIS GAME (`SAVES/<CODE>.SAV`).
-- **Page chooser:** BACK UP and RESTORE ask BOTH PAGES, ONLY A or ONLY B. A one-page backup keeps the other page of
-  the old `SAVES.BAK`; a one-page restore leaves the other flash page alone.
-- **Restore:** RESTORE PAGES lists the files on the card (SAVES.BAK, SAVES.BK1, SAVES.UND, every `SAVES/*.SAV`)
-  with the games in each; pick one, then the page chooser and the question (what each page holds now and what it
-  would hold, with LOSES warnings and version changes such as `V3 -> V2`). Every page write is read back.
-- **Undo:** before every restore and erase the two pages are written to `SAVES.UND`; UNDO LAST CHANGE puts them back
-  (undoing twice swaps back). A restore stops if the undo file cannot be written. An undo writes the pages it replaces
-  to `SAVES.UN2` and replaces `SAVES.UND` only after its pages are in flash, so a power cut keeps both.
-- **Erase a page:** asks first and warns when it is the only copy of a game's save.
-- **FIND GAME NAMES:** scans `.CHG` files in `GAMES` and two levels of sub-folders (B stops it) and rewrites
-  `GAMELIST.TXT`.
-- **GAMES LIST:** UP / DOWN move (hold to repeat), LEFT / RIGHT page, SELECT cycles ALL / MISSING ONLY / SAVES ONLY
-  / IGNORED ONLY, a short START press hides all games without a clear save code (ALL, MISSING ONLY: HIDE ALL), shows them again (IGNORED ONLY: SHOW ALL) or writes `GAMELIST.CSV` (SAVES ONLY), A opens a game's details, B goes back. Rows are tagged
-  A / B (that page holds the game now) and + (SAVES.BAK holds it).
-- **Game details:** path, title, the name shown and where it came from, scan result (with candidates when UNSURE),
-  flash page, backup status. Options: RESTORE ITS SAVE (from its `.SAV`), BACK UP ITS SAVE, IGNORE THIS GAME / SHOW
-  IT AGAIN.
-- **Names:** a built-in table (`Names.h`: public games only, CHGame's examples, CHix, StarLift, CHarth) and
-  `SAVENAME.TXT` on the card, which wins and has no size cap. Every other game is learned on your own card: FIND
-  GAME NAMES reads each game's title and appends `CODE=TITLE` (up to 32 new a scan; NAME LIST FULL means scan
-  again for the rest).
-- **Page A may hold game code:** a game over 50,432 bytes reaches into page A. SaveMan shows GAME CODE only when its own
-  image covers page A; otherwise page A holds the tail of that game's code and reads UNKNOWN DATA. That is
-  harmless (such a game never reads page A, and flashing it rewrites the page); BACK UP and RESTORE copy it as is.
-- **If a flash write fails** the library turns saving off until restart (SAVING IS OFF); backup and restore are refused.
-
-## The SD card
-
-FAT16 or FAT32 only; FAT12 cards (under about 16 MB) are not supported and show CARD NOT FAT32 (FatFs is built without exFAT): a card that answers but is exFAT, NTFS or unformatted shows
-CARD NOT FAT32, an empty slot NO CARD. Cards over 32 GB usually come exFAT: format them FAT32. Games are looked for
-in `GAMES` and its sub-folders (the CHGame menu's layout).
+| ![Scan](docs/shots/05_scan_done.png) | ![List](docs/shots/06_games_list.png) | ![Details](docs/shots/09_details.png) |
 
 ## Controls
 
-UP / DOWN choose, A picks, B goes back. Hold START for 3 s to return to the CHGame menu (the app counts
-90 frames itself; the library's own count would take 6 s at 30 fps). In GAMES LIST a short START press hides, shows or writes the CSV, by view.
+UP / DOWN choose, A picks, B goes back. Hold START for 3 s for the menu. In GAMES LIST: LEFT / RIGHT page, SELECT
+changes view, a short START hides all, shows all or writes the CSV (by view), A opens a game.
 
 ## Files on the card
 
-Root of the card unless stated.
+| File | Content |
+|---|---|
+| `SAVES.BAK`, `.BK1`, `.UND`, `.UN2` | 528 bytes: `CHSVBK01`, CRC-32, page count, then pages A and B. BK1 = the backup before; UND = before the last restore or erase; UN2 = before the last undo. To use a BK1, rename it to `SAVES.BAK`. |
+| `SAVES/<CODE>.SAV` | One game's page (272 bytes); the previous one is `.SV1`. |
+| `GAMELIST.TXT` | Rewritten by each scan: `PATH CODE TITLE`. |
+| `IGNORE.TXT` | Hidden games, one path or file name per line; `#` comments. Only the first 1 KB is used. |
+| `SAVENAME.TXT` | `CODE=NAME` lines. They win over the built-in table; the app only appends. |
+| `GAMELIST.CSV` | `file,folder,code,title,reason missing`, written from SAVES ONLY. |
 
-- `SAVES.BAK`, `SAVES.BK1` (the backup before), `SAVES.UND` (the pages before the last restore or erase; `SAVES.UN2`
-  the pages before the last undo): 528 bytes,
-  little-endian: `"CHSVBK01"` (8), CRC-32 of the pages (u32), page count (u16, 2), set count (u16, 1), then page A
-  (0xF500) and page B (0xF600), 256 bytes each. Temp files `.TMP` / `.UTM` (and `SAVES/<CODE>.TMP`) can be left by a
-  power cut; they are read in place of the missing file and renamed by the next write.
-  To use a `.BK1` by hand, rename it to `SAVES.BAK`.
-- `SAVES/<CODE>.SAV`: one game's page, same header with a page count of 1 (272 bytes). `<CODE>` is the 4-character
-  save code if it is all A-Z 0-9 _ -, else its 4 bytes in hex (`61622D63.SAV`). The previous one is `<CODE>.SV1`.
-- `GAMELIST.TXT`: rewritten by each scan, one line per game: `PATH CODE TITLE`. PATH is under `GAMES` (`SUB/CHIX.CHG`);
-  CODE is the 4-character save code, `-` for none, or `ABCD|WXYZ` (up to 3 candidates) when unsure; the title follows.
-  Lines starting with `#` are comments; the last one is `# SKIPPED n FILES IN m DEEP FOLDERS` when folders deeper
-  than `GAMES/X/Y` were skipped.
-- `IGNORE.TXT`: one game per line, its path under `GAMES` or just its file name, any case; `#` comments. Ignored games
-  are left out of the list counts (see IGNORED ONLY). The app appends and removes lines; a scan never touches it.
-  Only the first 1 KB (about 50 games) is used. In GAMES LIST, START hides all games without a clear save code (it appends their paths, never changing a line) or, in IGNORED ONLY, shows all again (only `#` lines stay; the file is removed when empty).
-- `SAVENAME.TXT`: lines `CODE=NAME`, `#` comments. Its names win over the built-in table; the app only appends.
-  Use it to name a game the scan marks UNSURE.
-- `GAMELIST.CSV`: written from GAMES LIST with START in SAVES ONLY: header `file,folder,code,title,reason missing`, CRLF lines;
-  reason is no save code found / unsure: several codes / ignored / both.
+A power cut can leave `.TMP` files; they are read in place of the missing file and renamed by the next write.
+FAT12, exFAT and NTFS cards show CARD NOT FAT32. Format large cards as FAT32.
+
+## Status
+
+v0.20, board-tested with 78 games: a save round trip (back up, erase, restore, the game loads it), the NO CARD and
+CARD ERROR screens, HIDE ALL / SHOW ALL, and a scan with every frame under 33.3 ms (30 fps). Not yet tried: an
+empty slot (NO CARD) and an exFAT card on the board. Image 50,428 B of 50,432, RAM about 16.9 KB.
 
 ## Build and test
 
-Needs: Arduino CLI with the CHGame board package (`CHGame:ch32v`, see the CHGame repository), Python 3 with
-pyserial and Pillow, and on Windows Git Bash plus a gcc for the host tests (w64devkit: put its `bin` on PATH).
+Needs the Arduino CLI with the CHGame board package (`CHGame:ch32v`), Python 3 (pyserial, Pillow) and, on Windows,
+Git Bash and a gcc such as w64devkit.
 
-    ./cl build                                           flash and RAM
-    ./cl run CHSaveMan/tools/scripts/smoke.txt out/smoke   screenshots
-    ./cl test                                            host test: the board's card code + FatFs on a RAM disk
-    ./cl check                                           everything: host test, scripts, all simulator tests, build
-    python CHSaveMan/tools/tests/sim_save.py             one simulator test file (also extra_safety.py,
-                                                         extra_features.py, sim_round3.py, sim_v019.py, sim_v020.py)
-    python CHSaveMan/tools/gen_names.py <CHGame checkout>  Names.h from CHGame's examples + names_extra.txt
-    python CHSaveMan/tools/gen_titlefont.py              TitleFont.h (SansBold12 cut to the title characters)
-    python CHSaveMan/tools/make_pubcard.py               a public sim card for the README pictures (pictures.txt)
+    ./cl build     flash and RAM
+    ./cl test      host test of the card code and FatFs on a RAM disk
+    ./cl check     everything: host test, scripts, simulator tests, build
 
-The simulator's card is a host file (`savm_sim.bak`, or `$SAVM_BAK`) and a folder (`$SAVM_CARD`).
-`$SAVM_NOCARD` (`1`, `fat`, `err`) and `$SAVM_FAIL` (`io`, `crc`, `scan`, `append`, `read`, `cut`) fake card
-faults; see `src/sd/sdio_sim.cpp`.
-
-## Needs the save library's raw page calls
-
-`save::rawPage()` and `save::rawWrite()` (and the flash-ownership change) are in the CHGame library's
-`Save.h`/`Save.cpp`; `chgame/` here carries that modified version (see `chgame/PATCHES.md`).
+The simulator's card is a host file (`savm_sim.bak`, or `$SAVM_BAK`) and a folder (`$SAVM_CARD`); `$SAVM_NOCARD`
+and `$SAVM_FAIL` fake card faults (`src/sd/sdio_sim.cpp`). `chgame/` is the vendored CHGame library with the raw
+page calls added to `Save.h`/`Save.cpp` (see `chgame/PATCHES.md`).
 
 ## Licence and credits
 
-GPL-3.0-or-later (see LICENSE): the SD card driver (Sd2Card, identical) and the FatFs glue (disk.cpp, given a
-250 ms CMD0 timeout here) come from the CHSDtoSerial app in CHGame (Kevin Bates, bateske), itself derived from
-William Greiman's sdfatlib (GPL-3.0); CHSaveMan/NOTICE lists exactly what was changed. FatFs is by ChaN (its own
-licence, `CHSaveMan/src/fatfs/FatFs-LICENSE.txt`). Built on CHGame, Copyright 2026 Kevin Bates, Apache-2.0; the title font is CHGfx's SansBold12 (DejaVu Sans Bold).
-Artwork (`docs/`) made by `tools/make_media.py` from STARLIFT's sprites.
+GPL-3.0-or-later (LICENSE). The SD driver and FatFs glue come from CHSDtoSerial in CHGame (Kevin Bates, bateske),
+derived from William Greiman's sdfatlib; `CHSaveMan/NOTICE` lists the changes. FatFs is by ChaN. Built on CHGame,
+Copyright 2026 Kevin Bates, Apache-2.0. The title font is CHGfx's SansBold12 (DejaVu Sans Bold). Artwork in `docs/`
+is made by `tools/make_media.py` from STARLIFT's sprites.
