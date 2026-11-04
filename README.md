@@ -7,6 +7,32 @@ them, which game each save belongs to, and lets you back them up to the SD card,
 
 ![GAMES LIST](docs/screenshot.png) ![The lander lifting a save](docs/lift.gif)
 
+## Features at a glance
+
+- See both shared flash save pages: which game owns each save, how old it is, and whether SAVES.BAK holds it
+- Back up both pages, one page or one game's save to the SD card; backups go to a temp file, are read back, then renamed
+- Restore from any backup with a clear question first: what each page holds now, what it would hold, LOSES warnings
+- Undo the last restore or erase (`SAVES.UND`), and undo the undo
+- Erase a page, with a warning when it is the only copy of a game's save
+- FIND GAME NAMES scans the card and learns the title of every `.CHG`, so saves show real names
+- GAMES LIST: browse every game on the card in ALL / MISSING ONLY / SAVES ONLY / IGNORED ONLY views
+- Hide games you don't care about (one by one, or HIDE ALL without saves) and bring them back with SHOW ALL
+- Export `GAMELIST.CSV` with the game, folder, save code and why a save is missing
+- Game details: path, title, scan result, flash page, backup status; restore or back up just that game's save
+- Every flash write is read back; a failed write is reported, never ignored
+- Runs at 30 fps on the board; a 78-game card scans in about 12 s
+
+## Screenshots
+
+| | | |
+|---|---|---|
+| ![Main](docs/shots/01_main.png) | ![Page menu](docs/shots/02_page_menu.png) | ![Back up](docs/shots/03_backup_chooser.png) |
+| The two save pages | Page menu | Back up which pages |
+| ![Scan](docs/shots/05_scan_done.png) | ![List](docs/shots/06_games_list.png) | ![Missing](docs/shots/07_missing.png) |
+| Scan done | Games list | Missing only |
+| ![Details](docs/shots/09_details.png) | | |
+| Game details | | |
+
 ## Install
 
 1. Copy `dist/SAVEMAN.CHG` (or the release's `SAVEMAN.CHG`) to the `GAMES` folder of the CHGame's SD card
