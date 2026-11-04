@@ -1,0 +1,20 @@
+# Scan the fake card (savm_card/GAMES) for game names; the pages hold a CHIX and a BECK record.
+wait 5
+say W 0 CHIX 1 5 40
+say W 1 ZZZZ 1 9 60
+wait 3
+snap 01_before
+tap DOWN
+tap DOWN
+tap DOWN
+tap DOWN
+wait 2
+snap 02_find
+tap A
+wait 2
+snap 03_scanning
+wait 15
+snap 04_done
+tap A
+wait 2
+snap 05_named

@@ -1,0 +1,21 @@
+# The README GIF: two games' saves, an erase, a backup and a restore.
+wait 5
+say W 0 CHAA 1 5 40
+say W 1 CHBB 1 9 60
+rec start 6
+wait 20
+tap A
+wait 12
+tap A
+wait 12
+tap B
+wait 6
+tap B
+wait 6
+tap DOWN
+tap DOWN
+tap A
+wait 20
+tap A
+wait 6
+rec stop 01_manager

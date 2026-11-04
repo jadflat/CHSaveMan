@@ -1,0 +1,7 @@
+out/
+build/
+__pycache__/
+*.pyc
+savm_card/
+savm_sim.bak
+dist/*.img

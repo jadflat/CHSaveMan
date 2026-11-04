@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chgame-upload"
+description = "The CHGame bootloader's uploader, in Python: probe, flash, selfupdate, burn"
+requires-python = ">=3.10"
+dependencies = ["pyserial"]
+dynamic = ["version"]
+
+[project.scripts]
+chgame-upload = "chgame_upload.cli:main"
+
+[tool.setuptools]
+packages = ["chgame_upload"]
+
+[tool.setuptools.dynamic]
+version = {attr = "chgame_upload.__version__"}

@@ -1,0 +1,9 @@
+# CODE=NAME, hand-kept: wins over the scanned titles. Short forms (14 characters at most) for long titles.
+BECK=BECKON
+CHLS=CELESTE
+CHSN=SNAKES&LADDERS
+CHTT=TIC TAC TOE
+CIVO=INVADER OVERLD
+FEAT=FEATHERED
+GOTD=OUT OF DUNGEON
+SHNB=SHINOBI

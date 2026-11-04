@@ -1,0 +1,9 @@
+# The tools' Python packages, for a plain install. `pip install -e .[sim]` in the
+# repository root installs the same, plus the `chgame` command (pyproject.toml).
+# Python packages for CHGame's tools (not needed to build or play).
+pillow      # screenshots, GIFs, asset pipelines
+pyserial    # talking to the board (chgame upload/run --device, chdrive.py --device, serialcap.py)
+numpy       # the box art (tools/artkit: chgame boxart, the menu's pictures)
+# CHCrossword's grid tools also need wordfreq (platform/board/arduino/CHGame/libraries/CHGame/examples/Games/CHCrossword/tools/requirements.txt).
+# A C++ compiler is also needed for the simulator, tests and audio previews:
+# zig, clang++ or g++ on the PATH, or `pip install ziglang`.

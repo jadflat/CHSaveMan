@@ -1,0 +1,8 @@
+CHGame
+Copyright 2026 Kevin Bates (bateske)
+
+The files at the root of this repository and under docs/ are licensed under
+the Apache License, Version 2.0; see LICENSE. Each folder below carries its
+own licence (the table under "Licences" in README.md): the board package and
+the bootloader are MIT, the libraries MIT or Apache-2.0, the games Apache-2.0,
+CHSDtoUSB GPL-3.0.

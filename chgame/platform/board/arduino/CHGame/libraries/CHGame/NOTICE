@@ -1,0 +1,10 @@
+CHGame library
+Copyright 2026 bateske
+
+Built from the code the CHGame casino games shared, which began in
+CHBlackjack (https://github.com/bateske/CHBlackjack, Apache-2.0).
+CHBlackjack is a derivative of "Blackjack" for the Arduboy by Press Play On
+Tape (Apache-2.0); the 3x5 pixel font in src/chgame/Draw.cpp is Press Play
+On Tape's.
+
+Everything else is under the Apache License 2.0 (LICENSE).

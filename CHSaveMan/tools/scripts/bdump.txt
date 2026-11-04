@@ -1,0 +1,5 @@
+# Board, read-only: dump SAVES.BAK, SAVENAME.TXT and the card's STARLIFT.CHG over serial.
+wait 10
+say D SAVES.BAK
+say D SAVENAME.TXT
+say D GAMES/GAMES/STARLIFT.CHG

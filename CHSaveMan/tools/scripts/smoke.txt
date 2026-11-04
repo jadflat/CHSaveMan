@@ -1,0 +1,41 @@
+# Fake records in both pages, look at them, back up, erase, restore.
+wait 5
+say W 0 BECK 1 5 40
+say W 1 CHBB 1 9 60
+wait 3
+snap 01_main
+tap A
+wait 3
+snap 02_page_menu
+tap A
+wait 3
+snap 03_confirm_erase
+tap B
+wait 2
+tap B
+wait 2
+tap DOWN
+tap DOWN
+tap A
+wait 3
+snap 04_working
+wait 3
+snap 05_backed_up
+tap A
+wait 2
+say E 0
+say E 1
+wait 3
+snap 06_erased
+tap DOWN
+tap A
+wait 4
+snap 07_confirm_restore
+tap DOWN
+tap A
+wait 3
+snap 08_working
+wait 3
+snap 09_restored
+tap A
+say Q

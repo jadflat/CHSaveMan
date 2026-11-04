@@ -1,0 +1,12 @@
+CHSd
+Copyright 2026 bateske
+
+The SPI-mode block driver (src/SdSpi.*), the FAT reader (src/Fat.*) and the
+FAT image builder (tools/fatimg.py) are HypeRunner's clean-room code (MIT),
+written from the SD Physical Layer Simplified Specification, the Microsoft
+FAT specification, the MBR layout and the CH32X035 reference manual, with
+no code from any other SD or FAT library. They reached CHSd by way of the
+cuts CHWords (polled, read-only, single-block) and CHCrossword (folders and
+name patterns) made of them, merged here.
+
+Everything in this folder is under the MIT License (LICENSE).

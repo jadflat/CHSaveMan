@@ -1,0 +1,6 @@
+CHGame tools
+Copyright 2026 bateske
+
+The PC simulator (chsim) and the helper scripts in this folder were written
+for the CHGame games, starting with CHBlackjack, and are shared by all of
+them. Licensed under the Apache License, Version 2.0; see LICENSE.

@@ -1,0 +1,15 @@
+{
+  "id": "chsaveman",
+  "title": "SAVE MANAGER",
+  "author": "Jadflat",
+  "genre": "Application",
+  "description": "See what is in the two flash save pages, erase one, and back both up to the SD card or restore them.",
+  "license": "GPL-3.0-or-later",
+  "licenseFiles": ["../LICENSE", "src/fatfs/FatFs-LICENSE.txt"],
+  "buttons": [
+    { "control": "UP / DOWN", "action": "Choose" },
+    { "control": "A", "action": "Pick" },
+    { "control": "B", "action": "Back" },
+    { "control": "START (hold 3 s)", "action": "Back to the CHGame menu" }
+  ]
+}

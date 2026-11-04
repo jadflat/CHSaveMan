@@ -1,0 +1,19 @@
+CHSaveMan
+Copyright (c) 2026 Jadflat, GPL-3.0-or-later (see ../LICENSE).
+
+A save manager for CHGame. The app code is original.
+
+The SD card driver and FatFs come from the CHSDtoSerial app of CHGame (https://github.com/bateske/CHGame,
+examples/Apps/CHSDtoSerial), whose driver derives from William Greiman's sdfatlib: GPL-3.0. That is why this app is
+GPL-3.0 too. Checked file by file against that app (2026-11-03):
+  - src/sd/Sd2Card.cpp, Sd2Card.h, Sd2PinMap.h, SdInfo.h: identical to CHSDtoSerial's (that copy already carries
+    the CHSDtoUSB changes: cmd0Timeout, crcOn).
+  - src/fatfs/ffconf.h, ff.h, diskio.h: identical.
+  - src/fatfs/ff.cpp: ChaN's FatFs, CHSDtoSerial's ff.c renamed (so the simulator's C++ build accepts it) and wrapped
+    in #ifndef CHSIM; otherwise identical. See src/fatfs/FatFs-LICENSE.txt.
+  - src/sd/disk.cpp: CHSDtoSerial's, changed: the CHSIM guard, the include paths, and Sd2Card::init is given a
+    250 ms CMD0 timeout (as CHSDtoUSB probes a slot) so an empty slot costs 250 ms instead of 2 s.
+src/sd/sdio_dev.cpp and sdio_sim.cpp (the SAVES.BAK / SAVENAME.TXT / scan layer) are original.
+
+Built on CHGame, Copyright 2026 Kevin Bates (bateske), Apache-2.0: the framework is vendored in chgame/ (see
+chgame/NOTICE and chgame/LICENSE). chgame/ carries the Save.h/Save.cpp with the raw page calls and flash ownership.

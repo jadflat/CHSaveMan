@@ -1,0 +1,34 @@
+# Board, read-only: traced scan; BACK UP -> REPLACE? answered NO; page B -> ERASE? answered NO; then hold START.
+wait 10
+say X
+say G
+snap 01_main
+tap DOWN
+tap DOWN
+tap A
+wait 8
+snap 02_replace_q
+say G
+tap A
+wait 4
+snap 03_replace_no
+say G
+tap UP
+wait 2
+tap A
+wait 3
+snap 04_page_menu
+tap A
+wait 3
+snap 05_erase_q
+say G
+tap A
+wait 3
+snap 06_erase_no
+say G
+tap B
+wait 3
+hold START
+free 3
+release
+free 2
