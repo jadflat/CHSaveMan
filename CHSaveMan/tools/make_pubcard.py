@@ -1,7 +1,5 @@
 """Writes out/pubcard: a simulator card with public games only (CHGame's examples, CHix, StarLift, CHarth), for
-the README pictures (docs/screenshot.png, dist/preview.png: CHSaveMan/tools/scripts/pictures.txt).
-    python CHSaveMan/tools/make_pubcard.py
-    SAVM_CARD=<abs path>/out/pubcard ./cl run CHSaveMan/tools/scripts/pictures.txt out/pictures"""
+the README pictures. tools/pictures.py runs this; "Demo Game" has a code outside Names.h, so the scan finds a new name."""
 import shutil
 import struct
 from pathlib import Path
@@ -34,7 +32,7 @@ GAMES = [("CHIX.CHG", "CHix", "CHIX"), ("STARLIFT.CHG", "StarLift", "SLFT"), ("C
          ("CASINO/ROULETTE.CHG", "Roulette", "CHRL"), ("CASINO/SLOTS.CHG", "Slots", "CHSL"),
          ("BOARD/CHESS.CHG", "Chess", "CHCS"), ("BOARD/CHECKERS.CHG", "Checkers", "CHCK"),
          ("BOARD/MAHJONG.CHG", "Mahjong", "CHMJ"), ("WORDS.CHG", "Words", "CHWD"), ("YACHT.CHG", "Yacht Dice", "CHYD"),
-         ("HELLO.CHG", "Hello", None)]
+         ("DEMO.CHG", "Demo Game", "DEMO"), ("HELLO.CHG", "Hello", None)]
 
 shutil.rmtree(OUT, ignore_errors=True)
 for p, t, c in GAMES:

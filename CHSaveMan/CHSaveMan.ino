@@ -20,7 +20,7 @@
 #include "TitleFont.h"          // SansBold12 cut to 0x20..0x5A (tools/gen_titlefont.py)
 #include "Names.h"      // the save codes and their games (tools/gen_names.py)
 
-#define SAVM_VERSION "0.20"
+#define SAVM_VERSION "0.21"
 
 enum Col : uint8_t { C_BG, C_PANEL, C_EDGE, C_TEXT, C_DIM, C_HI, C_GOOD, C_BAD, C_WARN };
 
@@ -1646,7 +1646,7 @@ static void draw() {
             }
             snprintf(a, sizeof a, "%u-%u", listN ? listTop + 1 : 0, listTop + LIST_ROWS < listN ? listTop + LIST_ROWS : listN);
             T(6, 121, a, C_DIM);
-            right(121, listMode == 2 ? "A:INFO SEL:VIEW START:CSV" : listMode == 3 ? "SEL:VIEW START:SHOW ALL" :
+            right(121, listMode == 2 ? "A:INFO SEL:VIEW ST:CSV" : listMode == 3 ? "SEL:VIEW START:SHOW ALL" :
                        "SEL:VIEW START:HIDE ALL", C_DIM);
             break;
         }

@@ -60,7 +60,7 @@ FAT12, exFAT and NTFS cards show CARD NOT FAT32. Format large cards as FAT32.
 
 ## Status
 
-v0.20, board-tested with 78 games: a save round trip (back up, erase, restore, the game loads it), the NO CARD and
+v0.21 changes only a footer text since v0.20, which was board-tested with 78 games: a save round trip (back up, erase, restore, the game loads it), the NO CARD and
 CARD ERROR screens, HIDE ALL / SHOW ALL, and a scan with every frame under 33.3 ms (30 fps). Not yet tried: an
 empty slot (NO CARD) and an exFAT card on the board. Image 50,428 B of 50,432, RAM about 16.9 KB.
 

@@ -1,25 +1,43 @@
-# README pictures from the public card (tools/make_pubcard.py; SAVM_CARD=<abs>/out/pubcard): main screen, GAMES LIST.
+# README pictures. Do not run this by hand: python CHSaveMan/tools/pictures.py sets up the public card first.
 wait 6
 say W 0 CHIX 1 7 64
 say W 1 SLFT 2 41 120
-wait 4
-tap B
-wait 4
+wait 8
 snap 01_main
-tap DOWN
-tap DOWN
-tap DOWN
-tap DOWN
-wait 2
-tap A
-wait 120
 tap A
 wait 4
-snap 02_after_scan
+snap 02_page_menu
+tap B
+wait 3
+tap DOWN
+tap DOWN
+tap A
+wait 4
+snap 03_backup_chooser
+tap B
+wait 3
+tap DOWN
+tap DOWN
+tap A
+wait 150
+snap 05_scan_done
+tap A
+wait 4
+tap DOWN
+tap A
+wait 10
+snap 06_games_list
+tap DOWN
+tap DOWN
+tap DOWN
+tap DOWN
+tap DOWN
+tap DOWN
+tap DOWN
 tap DOWN
 wait 2
 tap A
 wait 10
-snap 03_games_list
+snap 09_details
 tap B
 wait 4

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21 (2026-11-05)
+- GAMES LIST, SAVES ONLY: shorter footer, so the row counter no longer runs into it.
+- README pictures come from one command (`tools/pictures.py`).
+
 ## 0.20 (2026-11-05)
 - GAMES LIST, short START: in ALL and MISSING ONLY it asks HIDE n GAMES? (games with no clear save code) and
   appends their paths to `IGNORE.TXT`, never changing existing lines. It stops at the 1 KB the app reads. In
